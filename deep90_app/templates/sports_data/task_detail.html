@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Detalles de Tarea" %} - {{ task.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'sports_data:dashboard' %}">{% trans "Dashboard" %}</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'sports_data:task-list' %}">{% trans "Tareas" %}</a></li>
+            <li class="breadcrumb-item active">{{ task.name }}</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>{{ task.name }}</h1>
+        <div class="btn-group">
+            {% if task.status == 'pending' %}
+            <!-- Solo mostrar botones de editar/cancelar si la tarea está pendiente -->
+            <a href="{% url 'sports_data:edit-task' task.id %}" class="btn btn-warning">
+                <i class="fa fa-edit"></i> {% trans "Editar" %}
+            </a>
+            <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#cancelTaskModal">
+                <i class="fa fa-times"></i> {% trans "Cancelar Tarea" %}
+            </button>
+            {% endif %}
+            
+            {% if task.status != 'running' %}
+            <form method="post" action="{% url 'sports_data:execute-task' task.id %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-success">
+                    <i class="fa fa-play"></i> {% trans "Ejecutar Ahora" %}
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Modal para confirmar cancelación -->
+    <div class="modal fade" id="cancelTaskModal" tabindex="-1" aria-labelledby="cancelTaskModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="cancelTaskModalLabel">{% trans "Confirmar cancelación" %}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>{% trans "¿Está seguro de que desea cancelar esta tarea?" %}</p>
+                    <p class="text-muted">{% trans "Esta acción no se puede deshacer." %}</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "No, volver" %}</button>
+                    <form method="post" action="{% url 'sports_data:cancel-task' task.id %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-danger">
+                            {% trans "Sí, cancelar tarea" %}
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Información de la tarea -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">{% trans "Información de la Tarea" %}</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table">
+                        <tr>
+                            <th>{% trans "ID" %}:</th>
+                            <td>{{ task.id }}</td>
+                        </tr>
+                        <tr>
+                            <th>{% trans "Endpoint" %}:</th>
+                            <td>{{ task.endpoint.name }} ({{ task.endpoint.endpoint }})</td>
+                        </tr>
+                        <tr>
+                            <th>{% trans "Estado" %}:</th>
+                            <td>
+                                {% if task.status == 'pending' %}
+                                <span class="badge bg-warning">{% trans "Pendiente" %}</span>
+                                {% elif task.status == 'running' %}
+                                <span class="badge bg-info">{% trans "En ejecución" %}</span>
+                                {% elif task.status == 'success' %}
+                                <span class="badge bg-success">{% trans "Completado" %}</span>
+                                {% elif task.status == 'failed' %}
+                                <span class="badge bg-danger">{% trans "Fallido" %}</span>
+                                {% elif task.status == 'cancelled' %}
+                                <span class="badge bg-secondary">{% trans "Cancelado" %}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>{% trans "Tipo" %}:</th>
+                            <td>
+                                {% if task.schedule_type == 'immediate' %}
+                                <span class="badge bg-primary">{% trans "Inmediata" %}</span>
+                                {% elif task.schedule_type == 'scheduled' %}
+                                <span class="badge bg-info">{% trans "Programada" %}</span>
+                                <br>
+                                <small>{{ task.scheduled_time|date:"d/m/Y H:i" }}</small>
+                                {% elif task.schedule_type == 'periodic' %}
+                                <span class="badge bg-secondary">{% trans "Periódica" %}</span>
+                                <br>
+                                <small>{% blocktrans with interval=task.periodic_interval %}Cada {{ interval }} min.{% endblocktrans %}</small>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>{% trans "Creada por" %}:</th>
+                            <td>{{ task.created_by.username }}</td>
+                        </tr>
+                        <tr>
+                            <th>{% trans "Fecha de creación" %}:</th>
+                            <td>{{ task.created_at|date:"d/m/Y H:i" }}</td>
+                        </tr>
+                        {% if task.celery_task_id %}
+                        <tr>
+                            <th>{% trans "ID Celery" %}:</th>
+                            <td><code>{{ task.celery_task_id }}</code></td>
+                        </tr>
+                        {% endif %}
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">{% trans "Parámetros" %}</h5>
+                </div>
+                <div class="card-body">
+                    {% if task.parameters %}
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>{% trans "Parámetro" %}</th>
+                                    <th>{% trans "Valor" %}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for key, value in task.parameters.items %}
+                                <tr>
+                                    <td>{{ key }}</td>
+                                    <td>{{ value }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        {% trans "Esta tarea no tiene parámetros." %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Último resultado exitoso -->
+    {% if latest_success %}
+    <div class="card mb-4">
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0">{% trans "Último Resultado Exitoso" %}</h5>
+        </div>
+        <div class="card-body">
+            <div class="mb-3">
+                <label class="form-label">{% trans "Ejecutado el" %}: {{ latest_success.executed_at|date:"d/m/Y H:i:s" }}</label>
+                <div class="d-flex justify-content-between">
+                    <span class="badge bg-primary">{% trans "Tiempo de ejecución" %}: {{ latest_success.execution_time|floatformat:2 }}s</span>
+                    <a href="{% url 'sports_data:result-detail' latest_success.id %}" class="btn btn-sm btn-outline-primary">
+                        {% trans "Ver detalles completos" %}
+                    </a>
+                </div>
+            </div>
+            <div class="border rounded p-3 bg-light">
+                <pre class="response-data">{{ latest_success.get_formatted_response|truncatechars:500 }}</pre>
+                {% if latest_success.response_data|length > 500 %}
+                <div class="text-center mt-2">
+                    <a href="{% url 'sports_data:result-detail' latest_success.id %}" class="btn btn-sm btn-primary">
+                        {% trans "Ver respuesta completa" %}
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Historial de ejecuciones -->
+    <div class="card">
+        <div class="card-header bg-secondary text-white">
+            <h5 class="mb-0">{% trans "Historial de Ejecuciones" %}</h5>
+        </div>
+        <div class="card-body">
+            {% if results %}
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead>
+                        <tr>
+                            <th>{% trans "ID" %}</th>
+                            <th>{% trans "Fecha" %}</th>
+                            <th>{% trans "Estado" %}</th>
+                            <th>{% trans "Código" %}</th>
+                            <th>{% trans "Tiempo" %}</th>
+                            <th>{% trans "Acciones" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for result in results %}
+                        <tr>
+                            <td>{{ result.id }}</td>
+                            <td>{{ result.executed_at|date:"d/m/Y H:i:s" }}</td>
+                            <td>
+                                {% if result.success %}
+                                <span class="badge bg-success">{% trans "Éxito" %}</span>
+                                {% else %}
+                                <span class="badge bg-danger">{% trans "Error" %}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ result.response_code }}</td>
+                            <td>{{ result.execution_time|floatformat:2 }}s</td>
+                            <td>
+                                <a href="{% url 'sports_data:result-detail' result.id %}" class="btn btn-sm btn-primary">
+                                    <i class="fa fa-eye"></i> {% trans "Ver" %}
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                {% trans "Esta tarea aún no se ha ejecutado." %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

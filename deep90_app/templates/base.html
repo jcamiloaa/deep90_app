@@ -1,0 +1,292 @@
+{% load static i18n compress%}<!DOCTYPE html>
+{% get_current_language as LANGUAGE_CODE %}
+<html lang="{{ LANGUAGE_CODE }}">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="x-ua-compatible" content="ie=edge" />
+    <title>
+      {% block title %}Deep90 Admin{% endblock title %}
+    </title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Deep90 - Simple, revolucionario y 100% enfocado en ti" />
+    <meta name="author" content="JkamiloAt" />
+    <link rel="icon" href="{% static 'images/favicons/favicon.ico' %}" />
+    {% block css %}
+      <!-- Bootstrap CSS -->
+      <link rel="stylesheet"
+            href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/css/bootstrap.min.css"
+            integrity="sha512-SbiR/eusphKoMVVXysTKG/7VseWii+Y3FdHrt0EpKgpToZeemhqHeZeLWLhJutz/2ut2Vw1uQEj2MbRF+TVBUA=="
+            crossorigin="anonymous"
+            referrerpolicy="no-referrer" />
+      <!-- Font Awesome -->
+      <link rel="stylesheet"
+            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+            referrerpolicy="no-referrer" />
+      <!-- Google Fonts - Poppins -->
+      <link rel="stylesheet"
+            href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
+            crossorigin="anonymous"
+            referrerpolicy="no-referrer" />
+      <!-- Dashboard CSS -->
+      {% compress css %}
+        <link href="{% static 'css/project.css' %}" rel="stylesheet" />
+        <link href="{% static 'css/dashboard.css' %}" rel="stylesheet" />
+      {% endcompress %}
+      
+      <!-- Estilos personalizados para el modo oscuro -->
+      <style>
+        /* Mejora para tablas en modo oscuro */
+        body.dark-theme .table {
+          color: #e1e1e1; /* Color claro para el texto */
+        }
+        
+        body.dark-theme .table-striped > tbody > tr:nth-of-type(odd) {
+          color: #e1e1e1; /* Color claro para el texto */
+        }
+        
+        body.dark-theme .table-hover > tbody > tr:hover {
+          color: #ffffff; /* Color blanco para el texto en hover */
+        }
+        
+        body.dark-theme .table-light th {
+          color: #212529; /* Mantiene el color oscuro para encabezados en tabla-light */
+        }
+        
+        /* Asegurar que todos los textos sean visibles */
+        body.dark-theme .card .card-body .table td, 
+        body.dark-theme .card .card-body .table td * {
+          color: #e1e1e1 !important; /* Forzar color claro para todo texto en celdas */
+        }
+        
+        /* Excepciones para badges y botones que ya tienen sus propios colores */
+        body.dark-theme .card .card-body .table td .badge,
+        body.dark-theme .card .card-body .table td .btn {
+          color: inherit !important;
+        }
+        
+        /* Texto claro para botones light en modo oscuro */
+        body.dark-theme .card .card-body .table td .btn-light,
+        body.dark-theme .card .card-body .table td .btn-outline-light {
+          color: #212529 !important;
+        }
+      </style>
+    {% endblock css %}
+    
+    <!-- Javascript -->
+    {% block javascript %}
+      <!-- Bootstrap JS Bundle with Popper -->
+      <script defer
+              src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/js/bootstrap.bundle.min.js" 
+              integrity="sha512-i9cEfJwUwViEPFKdC1enz4ZRGBj8YQo6QByFTF92YXHi7waCqyexvRD75S5NVTsSiTv7rKWqG9Y5eFxmRsOn0A==" 
+              crossorigin="anonymous" 
+              referrerpolicy="no-referrer"></script>
+      <!-- Dashboard JS -->
+      {% compress js %}
+        <script defer src="{% static 'js/project.js' %}"></script>
+        <script defer src="{% static 'js/dashboard.js' %}"></script>
+      {% endcompress %}
+    {% endblock javascript %}
+  </head>
+  <body class="light-theme {% block bodyclass %}{% endblock bodyclass %}">
+    {% block body %}
+      {% if request.user.is_authenticated %}
+        <div class="dashboard-container">
+          <!-- Sidebar -->
+          <aside class="sidebar">
+            <div class="sidebar-header">
+              <a href="{% url 'home' %}" class="sidebar-brand">
+                <i class="fas fa-chart-line me-2"></i>
+                <span class="sidebar-text">Deep90 Admin</span>
+              </a>
+            </div>
+            <div class="sidebar-nav">
+              <div class="sidebar-heading">
+                <span class="sidebar-text">{% trans "Principal" %}</span>
+              </div>
+              <div class="sidebar-item">
+                <a href="{% url 'home' %}" class="sidebar-link">
+                  <i class="sidebar-icon fas fa-home"></i>
+                  <span class="sidebar-text">{% trans "Inicio" %}</span>
+                </a>
+              </div>
+              <div class="sidebar-item">
+                <a href="{% url 'users:detail' request.user.username %}" class="sidebar-link">
+                  <i class="sidebar-icon fas fa-user"></i>
+                  <span class="sidebar-text">{% trans "Mi Perfil" %}</span>
+                </a>
+              </div>
+              
+              {% if request.user.is_staff %}
+                <div class="sidebar-heading">
+                  <span class="sidebar-text">{% trans "API Football" %}</span>
+                </div>
+                <div class="sidebar-item">
+                  <a href="{% url 'sports_data:dashboard' %}" class="sidebar-link">
+                    <i class="sidebar-icon fas fa-tachometer-alt"></i>
+                    <span class="sidebar-text">{% trans "Dashboard" %}</span>
+                  </a>
+                </div>
+                <div class="sidebar-item">
+                  <a href="{% url 'sports_data:task-list' %}" class="sidebar-link">
+                    <i class="sidebar-icon fas fa-tasks"></i>
+                    <span class="sidebar-text">{% trans "Tareas" %}</span>
+                  </a>
+                </div>
+                <div class="sidebar-item">
+                  <a href="{% url 'sports_data:create-task-wizard' %}" class="sidebar-link">
+                    <i class="sidebar-icon fas fa-plus-circle"></i>
+                    <span class="sidebar-text">{% trans "Nueva Tarea" %}</span>
+                  </a>
+                </div>
+              {% endif %}
+              
+              {% if request.user.is_superuser %}
+                <div class="sidebar-heading">
+                  <span class="sidebar-text">{% trans "Administración" %}</span>
+                </div>
+                <div class="sidebar-item">
+                  <a href="{% url 'admin:index' %}" class="sidebar-link">
+                    <i class="sidebar-icon fas fa-cog"></i>
+                    <span class="sidebar-text">{% trans "Admin Django" %}</span>
+                  </a>
+                </div>
+              {% endif %}
+            </div>
+          </aside>
+
+          <!-- Contenido principal -->
+          <div class="dashboard-content">
+            <!-- Barra de navegación superior -->
+            <nav class="dashboard-navbar">
+              <div>
+                <button id="sidebar-toggle" class="sidebar-toggle" type="button" title="Alternar barra lateral">
+                  <i class="fas fa-bars"></i>
+                </button>
+                <button id="mobile-menu-toggle" class="sidebar-toggle d-md-none" type="button">
+                  <i class="fas fa-bars"></i>
+                </button>
+              </div>
+              <div class="navbar-right">
+                <div class="navbar-item">
+                  <button id="theme-toggle" class="theme-toggle" type="button" title="Cambiar modo oscuro">
+                    <i class="fas fa-moon"></i>
+                  </button>
+                </div>
+                <div class="navbar-item dropdown">
+                  <a href="#" class="nav-link dropdown-toggle" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="fas fa-user-circle me-1"></i>
+                    {{ request.user.username }}
+                  </a>
+                  <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                    <li>
+                      <a class="dropdown-item" href="{% url 'users:detail' request.user.username %}">
+                        <i class="fas fa-user me-2"></i> {% translate "Mi Perfil" %}
+                      </a>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                      <a class="dropdown-item" href="{% url 'account_logout' %}">
+                        <i class="fas fa-sign-out-alt me-2"></i> {% translate "Cerrar Sesión" %}
+                      </a>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </nav>
+            
+            <!-- Mensajes y alertas -->
+            {% if messages %}
+              <div class="messages-container mt-3">
+                {% for message in messages %}
+                  <div class="alert alert-dismissible {% if message.tags %}alert-{{ message.tags }}{% endif %}">
+                    {{ message }}
+                    <button type="button"
+                            class="btn-close"
+                            data-bs-dismiss="alert"
+                            aria-label="Close"></button>
+                  </div>
+                {% endfor %}
+              </div>
+            {% endif %}
+            
+            <!-- Contenido de la página -->
+            <div class="container-fluid py-4">
+              {% block content %}
+                <!-- El contenido específico de la página irá aquí -->
+              {% endblock content %}
+            </div>
+          </div>
+        </div>
+      {% else %}
+        <!-- Diseño para usuarios no autenticados -->
+        <div class="mb-1">
+          <nav class="navbar navbar-expand-md navbar-light bg-light">
+            <div class="container">
+              <a class="navbar-brand" href="{% url 'home' %}">
+                
+                <img src="{% static 'images/logo.png' %}" alt="Deep90 Logo" class="img-fluid mb-4" style="max-width: 200px;" />
+              </a>
+              <button class="navbar-toggler"
+                      type="button"
+                      data-bs-toggle="collapse"
+                      data-bs-target="#navbarSupportedContent"
+                      aria-controls="navbarSupportedContent"
+                      aria-expanded="false"
+                      aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+              </button>
+              <div class="collapse navbar-collapse" id="navbarSupportedContent">
+                <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+                  {% if ACCOUNT_ALLOW_REGISTRATION %}
+                    <li class="nav-item">
+                      <a id="sign-up-link" class="nav-link" href="{% url 'account_signup' %}">
+                        <i class="fas fa-user-plus me-1"></i> {% translate "Registrarse" %}
+                      </a>
+                    </li>
+                  {% endif %}
+                  <li class="nav-item">
+                    <a id="log-in-link" class="nav-link" href="{% url 'account_login' %}">
+                      <i class="fas fa-sign-in-alt me-1"></i> {% translate "Iniciar Sesión" %}
+                    </a>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </nav>
+        </div>
+        <div class="container py-5">
+          {% if messages %}
+            {% for message in messages %}
+              <div class="alert alert-dismissible {% if message.tags %}alert-{{ message.tags }}{% endif %}">
+                {{ message }}
+                <button type="button"
+                        class="btn-close"
+                        data-bs-dismiss="alert"
+                        aria-label="Close"></button>
+              </div>
+            {% endfor %}
+          {% endif %}
+          {% block main %}
+            {% block content_unauth %}
+              <!-- Contenido para usuarios no autenticados -->
+            {% endblock content_unauth %}
+          {% endblock main %}
+        </div>
+      {% endif %}
+    {% endblock body %}
+    
+    {% block modal %}{% endblock modal %}
+    
+    {% block inline_javascript %}
+      {% comment %}
+      Script tags with only code, no src (defer by default). To run
+      with a "defer" so that you run inline code:
+      <script>
+        window.addEventListener('DOMContentLoaded', () => {
+          /* Run whatever you want */
+        });
+      </script>
+      {% endcomment %}
+    {% endblock inline_javascript %}
+  </body>
+</html>

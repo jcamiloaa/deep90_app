@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Resultado API" %} #{{ result.id }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'sports_data:dashboard' %}">{% trans "Dashboard" %}</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'sports_data:task-list' %}">{% trans "Tareas" %}</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'sports_data:task-detail' task.id %}">{{ task.name }}</a></li>
+            <li class="breadcrumb-item active">{% trans "Resultado" %} #{{ result.id }}</li>
+        </ol>
+    </nav>
+
+    <div class="card mb-4">
+        <div class="card-header {% if result.success %}bg-success{% else %}bg-danger{% endif %} text-white">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    {% if result.success %}
+                    {% trans "Resultado Exitoso" %}
+                    {% else %}
+                    {% trans "Resultado Fallido" %}
+                    {% endif %}
+                </h5>
+                <div>
+                    <a href="{% url 'sports_data:task-detail' task.id %}" class="btn btn-light btn-sm">
+                        {% trans "Volver a la tarea" %}
+                    </a>
+                </div>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <table class="table">
+                        <tr>
+                            <th>{% trans "ID" %}:</th>
+                            <td>{{ result.id }}</td>
+                        </tr>
+                        <tr>
+                            <th>{% trans "Tarea" %}:</th>
+                            <td>{{ task.name }}</td>
+                        </tr>
+                        <tr>
+                            <th>{% trans "Endpoint" %}:</th>
+                            <td>{{ task.endpoint.name }}</td>
+                        </tr>
+                        <tr>
+                            <th>{% trans "Fecha de ejecución" %}:</th>
+                            <td>{{ result.executed_at|date:"d/m/Y H:i:s" }}</td>
+                        </tr>
+                    </table>
+                </div>
+                <div class="col-md-6">
+                    <table class="table">
+                        <tr>
+                            <th>{% trans "Estado" %}:</th>
+                            <td>
+                                {% if result.success %}
+                                <span class="badge bg-success">{% trans "Éxito" %}</span>
+                                {% else %}
+                                <span class="badge bg-danger">{% trans "Error" %}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>{% trans "Código de respuesta" %}:</th>
+                            <td>{{ result.response_code }}</td>
+                        </tr>
+                        <tr>
+                            <th>{% trans "Tiempo de ejecución" %}:</th>
+                            <td>{{ result.execution_time|floatformat:2 }} segundos</td>
+                        </tr>
+                        {% if not result.success %}
+                        <tr>
+                            <th>{% trans "Error" %}:</th>
+                            <td class="text-danger">{{ result.error_message }}</td>
+                        </tr>
+                        {% endif %}
+                    </table>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">{% trans "Datos de Respuesta" %}</h5>
+                </div>
+                <div class="card-body">
+                    {% if result.response_data %}
+                    <div class="bg-light p-3 rounded">
+                        <pre class="response-data m-0" style="max-height: 500px; overflow-y: auto;">{{ formatted_data }}</pre>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        {% trans "No hay datos de respuesta disponibles." %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .response-data {
+        white-space: pre-wrap;
+        font-family: monospace;
+        word-break: break-all;
+    }
+</style>
+{% endblock %}

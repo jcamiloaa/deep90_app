@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+{% load i18n %}
+{% load static %}
+
+{% block title %}Deep90 - Panel de Administración{% endblock %}
+
+{% block content %}
+<!-- Contenido para usuarios autenticados -->
+<div class="admin-dashboard-home">
+  <!-- Hero Section -->
+  <div class="admin-hero mb-5">
+    <div class="row align-items-center">
+      <div class="col-lg-7">
+        <h1 class="display-4 fw-bold mb-3">Bienvenido al Panel de Administración</h1>
+        <p class="lead mb-4">Administra, monitoriza y optimiza todos los aspectos de la plataforma Deep90 desde un solo lugar.</p>
+        <div class="d-flex gap-3 mb-4">
+          <a href="{% url 'sports_data:dashboard' %}" class="btn btn-primary btn-lg">
+            <i class="fas fa-tachometer-alt me-2"></i> Dashboard
+          </a>
+          <a href="{% url 'sports_data:task-list' %}" class="btn btn-outline-secondary btn-lg">
+            <i class="fas fa-tasks me-2"></i> Ver Tareas
+          </a>
+        </div>
+      </div>
+      <div class="col-lg-5 text-center d-none d-lg-block">
+        <div class="admin-hero-image">
+          <!-- Aquí iría el logo cuando esté disponible -->
+          <img src="{% static 'images/logo.png' %}" alt="Deep90 Logo" class="img-fluid" /> 
+         
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats Overview -->
+  <div class="row g-4 mb-5">
+    <div class="col-12">
+      <h2 class="mb-4 border-bottom pb-2">Resumen del Sistema</h2>
+    </div>
+    
+    <div class="col-md-3 col-6">
+      <div class="stat-card bg-primary text-white rounded p-4">
+        <div class="stat-icon mb-2">
+          <i class="fas fa-database fa-2x"></i>
+        </div>
+        <h3 class="stat-number">API</h3>
+        <p class="stat-label mb-0">Gestión de Datos</p>
+      </div>
+    </div>
+    
+    <div class="col-md-3 col-6">
+      <div class="stat-card bg-success text-white rounded p-4">
+        <div class="stat-icon mb-2">
+          <i class="fas fa-users fa-2x"></i>
+        </div>
+        <h3 class="stat-number">Usuarios</h3>
+        <p class="stat-label mb-0">Administración</p>
+      </div>
+    </div>
+    
+    <div class="col-md-3 col-6">
+      <div class="stat-card bg-warning text-white rounded p-4">
+        <div class="stat-icon mb-2">
+          <i class="fas fa-robot fa-2x"></i>
+        </div>
+        <h3 class="stat-number">IA</h3>
+        <p class="stat-label mb-0">Análisis Predictivo</p>
+      </div>
+    </div>
+    
+    <div class="col-md-3 col-6">
+      <div class="stat-card bg-info text-white rounded p-4">
+        <div class="stat-icon mb-2">
+          <i class="fas fa-chart-pie fa-2x"></i>
+        </div>
+        <h3 class="stat-number">Reportes</h3>
+        <p class="stat-label mb-0">Estadísticas</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Access -->
+  <div class="row mb-5">
+    <div class="col-12">
+      <h2 class="mb-4 border-bottom pb-2">Acceso Rápido</h2>
+    </div>
+    
+    <div class="col-md-4 mb-4">
+      <div class="card h-100 border-0 shadow-sm">
+        <div class="card-body">
+          <h3 class="card-title">
+            <i class="fas fa-futbol text-primary me-2"></i>
+            API Football
+          </h3>
+          <p class="card-text">Gestiona todos los endpoints de la API, programa tareas y visualiza los resultados.</p>
+          <a href="{% url 'sports_data:dashboard' %}" class="btn btn-sm btn-primary">Ir al Dashboard</a>
+        </div>
+      </div>
+    </div>
+    
+    <div class="col-md-4 mb-4">
+      <div class="card h-100 border-0 shadow-sm">
+        <div class="card-body">
+          <h3 class="card-title">
+            <i class="fas fa-user-shield text-success me-2"></i>
+            Administración
+          </h3>
+          <p class="card-text">Accede al panel de administración de Django para la gestión completa del sistema.</p>
+          <a href="{% url 'admin:index' %}" class="btn btn-sm btn-success">Panel Admin</a>
+        </div>
+      </div>
+    </div>
+    
+    <div class="col-md-4 mb-4">
+      <div class="card h-100 border-0 shadow-sm">
+        <div class="card-body">
+          <h3 class="card-title">
+            <i class="fas fa-user-cog text-warning me-2"></i>
+            Mi Perfil
+          </h3>
+          <p class="card-text">Gestiona tu cuenta, cambia tu contraseña y actualiza tus datos personales.</p>
+          <a href="{% url 'users:detail' request.user.username %}" class="btn btn-sm btn-warning">Ver Perfil</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- About Deep90 -->
+
+</div>
+
+<style>
+  .admin-dashboard-home {
+    padding-bottom: 2rem;
+  }
+  
+  .admin-hero {
+    padding: 3rem 0;
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .admin-hero-bg-shape {
+    position: absolute;
+    top: -50%;
+    right: -10%;
+    width: 300px;
+    height: 300px;
+    background-color: rgba(52, 152, 219, 0.1);
+    border-radius: 50%;
+    z-index: -1;
+  }
+  
+  .admin-hero-image {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  
+  .stat-card {
+    height: 100%;
+    transition: transform 0.3s;
+  }
+  
+  .stat-card:hover {
+    transform: translateY(-5px);
+  }
+  
+  .stat-icon {
+    opacity: 0.8;
+  }
+  
+  .stat-number {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 0;
+  }
+  
+  .stat-label {
+    opacity: 0.8;
+    font-size: 0.9rem;
+  }
+</style>
+{% endblock %}
+
+{% block content_unauth %}
+<!-- Contenido para usuarios NO autenticados -->
+<div class="container-fluid px-md-5">
+  <div class="admin-login-hero py-5">
+    <div class="row align-items-center">
+      <div class="col-lg-6 text-center text-lg-start mb-5 mb-lg-0">
+        <div class="mb-4">                    
+          <div class="d-flex align-items-center justify-content-center justify-content-lg-start">
+            <i class="fas fa-chart-line fa-4x text-primary me-3"></i>
+            <h1 class="display-4 fw-bold text-primary mb-0">DeepAdmin</h1>
+          </div>
+          <p class="lead text-muted mt-3">Panel de Administración</p>
+        </div>
+        
+        <h2 class="mb-4">Control total para administradores</h2>
+        <p class="lead mb-4">Gestiona datos deportivos, tareas programadas y análisis avanzados para la plataforma Deep90.</p>
+        <p class="mb-4">Este sistema está diseñado exclusivamente para administradores y personal autorizado. Si eres un usuario de Deep90, por favor visita el sitio principal.</p>
+        
+        <div class="d-flex flex-column flex-sm-row gap-3">
+          <a href="{% url 'account_login' %}" class="btn btn-primary btn-lg">
+            <i class="fas fa-sign-in-alt me-2"></i> Iniciar Sesión
+          </a>
+          <a href="https://www.deep90.com/" target="_blank" class="btn btn-outline-secondary btn-lg">
+            <i class="fas fa-external-link-alt me-2"></i> Sitio Principal
+          </a>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="admin-login-feature px-4 py-5 rounded bg-light shadow-sm">
+          <div class="text-center mb-4">
+            <i class="fas fa-shield-alt fa-3x text-primary mb-3"></i>
+            <h3>Acceso Seguro</h3>
+            <p class="text-muted">Inicia sesión para acceder al panel de administración</p>
+          </div>
+          
+          <div class="row g-4 text-center">
+            <div class="col-md-4">
+              <div class="feature-item">
+                <i class="fas fa-tachometer-alt fa-2x text-success mb-3"></i>
+                <h4>Dashboard</h4>
+                <p class="small text-muted">Monitorea la actividad en tiempo real</p>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="feature-item">
+                <i class="fas fa-tasks fa-2x text-warning mb-3"></i>
+                <h4>Tareas API</h4>
+                <p class="small text-muted">Gestiona tareas programadas</p>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="feature-item">
+                <i class="fas fa-database fa-2x text-info mb-3"></i>
+                <h4>Datos</h4>
+                <p class="small text-muted">Administra los datos deportivos</p>
+              </div>
+            </div>
+          </div>
+          
+          <div class="text-center mt-4">
+            <p class="text-muted small">Desarrollado por <a href="https://www.buzztia.com/" target="_blank" class="text-decoration-none">Buzztia</a></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .admin-login-hero {
+    min-height: 80vh;
+    display: flex;
+    align-items: center;
+  }
+  
+  .admin-login-feature {
+    border-radius: 10px;
+    border-top: 4px solid #3498db;
+  }
+  
+  .feature-item {
+    padding: 1rem;
+    transition: transform 0.3s;
+  }
+  
+  .feature-item:hover {
+    transform: translateY(-5px);
+  }
+</style>
+{% endblock %}
+
+

@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Crear Nueva Tarea API" %}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'sports_data:dashboard' %}">{% trans "Dashboard" %}</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'sports_data:task-list' %}">{% trans "Tareas" %}</a></li>
+            <li class="breadcrumb-item active">{% trans "Nueva Tarea" %}</li>
+        </ol>
+    </nav>
+
+    <div class="card">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">{% trans "Crear Nueva Tarea" %}</h5>
+        </div>
+        <div class="card-body">
+            <!-- Indicador de progreso -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="progress" style="height: 30px;">
+                        {% if step == 1 %}
+                        <div class="progress-bar" role="progressbar" style="width: 33%;" aria-valuenow="33" aria-valuemin="0" aria-valuemax="100">
+                            {% trans "Paso 1: Seleccionar Endpoint" %} (1/3)
+                        </div>
+                        {% elif step == 2 %}
+                        <div class="progress-bar" role="progressbar" style="width: 66%;" aria-valuenow="66" aria-valuemin="0" aria-valuemax="100">
+                            {% trans "Paso 2: Configurar Parámetros" %} (2/3)
+                        </div>
+                        {% elif step == 3 %}
+                        <div class="progress-bar" role="progressbar" style="width: 100%;" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100">
+                            {% trans "Paso 3: Programar Tarea" %} (3/3)
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Paso 1: Selección de Endpoint -->
+            {% if step == 1 %}
+            <form method="post" action="{% url 'sports_data:create-task-wizard' %}">
+                {% csrf_token %}
+                <div class="mb-4">
+                    <h4>{% trans "Seleccione un Endpoint API" %}</h4>
+                    <p class="text-muted">{% trans "Elija el endpoint que desea consultar" %}</p>
+                </div>
+                
+                <div class="form-group mb-3">
+                    {{ form.endpoint.label_tag }}
+                    {{ form.endpoint }}
+                    {% if form.endpoint.errors %}
+                    <div class="invalid-feedback d-block">
+                        {{ form.endpoint.errors }}
+                    </div>
+                    {% endif %}
+                    {% if form.endpoint.help_text %}
+                    <small class="form-text text-muted">{{ form.endpoint.help_text }}</small>
+                    {% endif %}
+                </div>
+
+                <div class="d-flex justify-content-between mt-4">
+                    <a href="{% url 'sports_data:task-list' %}" class="btn btn-secondary">
+                        {% trans "Cancelar" %}
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        {% trans "Siguiente" %} <i class="fa fa-arrow-right"></i>
+                    </button>
+                </div>
+            </form>
+
+            <!-- Paso 2: Configuración de Parámetros -->
+            {% elif step == 2 %}
+            <div class="mb-4">
+                <h4>{% trans "Configurar Parámetros" %}</h4>
+                <p class="text-muted">
+                    {% trans "Endpoint seleccionado" %}: <strong>{{ endpoint.name }}</strong>
+                </p>
+            </div>
+
+            {% if endpoint.has_parameters %}
+            <form method="post" action="{% url 'sports_data:create-task-wizard' step=2 %}?endpoint={{ endpoint.id }}">
+                {% csrf_token %}
+                
+                {% for field in form %}
+                <div class="form-group mb-3">
+                    {{ field.label_tag }}
+                    {{ field }}
+                    {% if field.errors %}
+                    <div class="invalid-feedback d-block">
+                        {{ field.errors }}
+                    </div>
+                    {% endif %}
+                    {% if field.help_text %}
+                    <small class="form-text text-muted">{{ field.help_text }}</small>
+                    {% endif %}
+                </div>
+                {% endfor %}
+                
+                <div class="d-flex justify-content-between mt-4">
+                    <a href="{% url 'sports_data:create-task-wizard' %}" class="btn btn-secondary">
+                        <i class="fa fa-arrow-left"></i> {% trans "Anterior" %}
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        {% trans "Siguiente" %} <i class="fa fa-arrow-right"></i>
+                    </button>
+                </div>
+            </form>
+            {% else %}
+            <div class="alert alert-info">
+                {% trans "Este endpoint no requiere parámetros." %}
+            </div>
+            <div class="d-flex justify-content-between mt-4">
+                <a href="{% url 'sports_data:create-task-wizard' %}" class="btn btn-secondary">
+                    <i class="fa fa-arrow-left"></i> {% trans "Anterior" %}
+                </a>
+                <a href="{% url 'sports_data:create-task-wizard' step=3 %}?endpoint={{ endpoint.id }}" class="btn btn-primary">
+                    {% trans "Siguiente" %} <i class="fa fa-arrow-right"></i>
+                </a>
+            </div>
+            {% endif %}
+
+            <!-- Paso 3: Programación de la Tarea -->
+            {% elif step == 3 %}
+            <div class="mb-4">
+                <h4>{% trans "Programar Tarea" %}</h4>
+                <p class="text-muted">
+                    {% trans "Endpoint" %}: <strong>{{ endpoint.name }}</strong>
+                    {% if parameters %}
+                    <br>
+                    {% trans "Parámetros configurados" %}
+                    {% endif %}
+                </p>
+                
+                {% if parameters %}
+                <div class="mb-3">
+                    <div class="card bg-light">
+                        <div class="card-body">
+                            <table class="table table-sm mb-0">
+                                <tbody>
+                                    {% for key, value in parameters.items %}
+                                    <tr>
+                                        <th>{{ key }}</th>
+                                        <td>{{ value }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            
+            <form method="post" action="{% url 'sports_data:create-task-wizard' step=3 %}?endpoint={{ endpoint.id }}">
+                {% csrf_token %}
+                <!-- Añadir campo oculto para el endpoint -->
+                <input type="hidden" name="endpoint" value="{{ endpoint.id }}">
+                
+                <div class="form-group mb-3">
+                    {{ form.name.label_tag }}
+                    {{ form.name }}
+                    {% if form.name.errors %}
+                    <div class="invalid-feedback d-block">
+                        {{ form.name.errors }}
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <div class="form-group mb-3">
+                    {{ form.schedule_type.label_tag }}
+                    {{ form.schedule_type }}
+                    {% if form.schedule_type.errors %}
+                    <div class="invalid-feedback d-block">
+                        {{ form.schedule_type.errors }}
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <div class="form-group mb-3 scheduled-time-group">
+                    {{ form.scheduled_time.label_tag }}
+                    {{ form.scheduled_time }}
+                    {% if form.scheduled_time.errors %}
+                    <div class="invalid-feedback d-block">
+                        {{ form.scheduled_time.errors }}
+                    </div>
+                    {% endif %}
+                    <small class="form-text text-muted">{% trans "Para tareas programadas a una fecha/hora específica" %}</small>
+                </div>
+                
+                <div class="form-group mb-3 periodic-interval-group">
+                    {{ form.periodic_interval.label_tag }}
+                    {{ form.periodic_interval }}
+                    {% if form.periodic_interval.errors %}
+                    <div class="invalid-feedback d-block">
+                        {{ form.periodic_interval.errors }}
+                    </div>
+                    {% endif %}
+                    <small class="form-text text-muted">{% trans "Intervalo en minutos para tareas periódicas" %}</small>
+                </div>
+                
+                <div class="d-flex justify-content-between mt-4">
+                    <a href="{% if endpoint.has_parameters %}{% url 'sports_data:create-task-wizard' step=2 %}?endpoint={{ endpoint.id }}{% else %}{% url 'sports_data:create-task-wizard' %}{% endif %}" class="btn btn-secondary">
+                        <i class="fa fa-arrow-left"></i> {% trans "Anterior" %}
+                    </a>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fa fa-check"></i> {% trans "Crear Tarea" %}
+                    </button>
+                </div>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% block extra_javascript %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Control de visibilidad de campos según el tipo de programación
+        const scheduleTypeSelect = document.getElementById('id_schedule_type');
+        if (scheduleTypeSelect) {
+            const scheduledTimeGroup = document.querySelector('.scheduled-time-group');
+            const periodicIntervalGroup = document.querySelector('.periodic-interval-group');
+            
+            function updateFieldsVisibility() {
+                if (scheduleTypeSelect.value === 'scheduled') {
+                    scheduledTimeGroup.style.display = 'block';
+                    periodicIntervalGroup.style.display = 'none';
+                } else if (scheduleTypeSelect.value === 'periodic') {
+                    scheduledTimeGroup.style.display = 'none';
+                    periodicIntervalGroup.style.display = 'block';
+                } else {
+                    scheduledTimeGroup.style.display = 'none';
+                    periodicIntervalGroup.style.display = 'none';
+                }
+            }
+            
+            // Inicializar y añadir evento de cambio
+            updateFieldsVisibility();
+            scheduleTypeSelect.addEventListener('change', updateFieldsVisibility);
+        }
+    });
+</script>
+{% endblock %}
+{% endblock %}

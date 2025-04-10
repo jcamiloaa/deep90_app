@@ -1,0 +1,16 @@
+services:
+  docs:
+    image: deep90_app_local_docs
+    container_name: deep90_app_local_docs
+    build:
+      context: .
+      dockerfile: ./compose/local/docs/Dockerfile
+    env_file:
+      - ./.envs/.local/.django
+    volumes:
+      - ./docs:/docs:z
+      - ./config:/app/config:z
+      - ./deep90_app:/app/deep90_app:z
+    ports:
+      - '9000:9000'
+    command: /start-docs

@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Editar Tarea" %} - {{ object.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'sports_data:dashboard' %}">{% trans "Dashboard" %}</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'sports_data:task-list' %}">{% trans "Tareas" %}</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'sports_data:task-detail' object.id %}">{{ object.name }}</a></li>
+            <li class="breadcrumb-item active">{% trans "Editar" %}</li>
+        </ol>
+    </nav>
+
+    <div class="card">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">{% trans "Editar Tarea" %} - {{ object.name }}</h5>
+        </div>
+        <div class="card-body">
+            <div class="mb-4">
+                <p class="text-muted">
+                    {% trans "Endpoint" %}: <strong>{{ object.endpoint.name }}</strong>
+                    {% if parameters %}
+                    <br>
+                    {% trans "Parámetros configurados (no editables)" %}
+                    {% endif %}
+                </p>
+                
+                {% if parameters %}
+                <div class="mb-3">
+                    <div class="card bg-light">
+                        <div class="card-body">
+                            <table class="table table-sm mb-0">
+                                <tbody>
+                                    {% for key, value in parameters.items %}
+                                    <tr>
+                                        <th>{{ key }}</th>
+                                        <td>{{ value }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            
+            <form method="post">
+                {% csrf_token %}
+                
+                <div class="form-group mb-3">
+                    {{ form.name.label_tag }}
+                    {{ form.name }}
+                    {% if form.name.errors %}
+                    <div class="invalid-feedback d-block">
+                        {{ form.name.errors }}
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <div class="form-group mb-3">
+                    {{ form.schedule_type.label_tag }}
+                    {{ form.schedule_type }}
+                    {% if form.schedule_type.errors %}
+                    <div class="invalid-feedback d-block">
+                        {{ form.schedule_type.errors }}
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <div class="form-group mb-3 scheduled-time-group">
+                    {{ form.scheduled_time.label_tag }}
+                    {{ form.scheduled_time }}
+                    {% if form.scheduled_time.errors %}
+                    <div class="invalid-feedback d-block">
+                        {{ form.scheduled_time.errors }}
+                    </div>
+                    {% endif %}
+                    <small class="form-text text-muted">{% trans "Para tareas programadas a una fecha/hora específica" %}</small>
+                </div>
+                
+                <div class="form-group mb-3 periodic-interval-group">
+                    {{ form.periodic_interval.label_tag }}
+                    {{ form.periodic_interval }}
+                    {% if form.periodic_interval.errors %}
+                    <div class="invalid-feedback d-block">
+                        {{ form.periodic_interval.errors }}
+                    </div>
+                    {% endif %}
+                    <small class="form-text text-muted">{% trans "Intervalo en minutos para tareas periódicas" %}</small>
+                </div>
+                
+                <!-- Campo oculto para el endpoint, manteniendo el endpoint actual -->
+                {{ form.endpoint }}
+                
+                <div class="d-flex justify-content-between mt-4">
+                    <a href="{% url 'sports_data:task-detail' object.id %}" class="btn btn-secondary">
+                        {% trans "Cancelar" %}
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fa fa-save"></i> {% trans "Guardar Cambios" %}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% block extra_javascript %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Control de visibilidad de campos según el tipo de programación
+        const scheduleTypeSelect = document.getElementById('id_schedule_type');
+        if (scheduleTypeSelect) {
+            const scheduledTimeGroup = document.querySelector('.scheduled-time-group');
+            const periodicIntervalGroup = document.querySelector('.periodic-interval-group');
+            
+            function updateFieldsVisibility() {
+                if (scheduleTypeSelect.value === 'scheduled') {
+                    scheduledTimeGroup.style.display = 'block';
+                    periodicIntervalGroup.style.display = 'none';
+                } else if (scheduleTypeSelect.value === 'periodic') {
+                    scheduledTimeGroup.style.display = 'none';
+                    periodicIntervalGroup.style.display = 'block';
+                } else {
+                    scheduledTimeGroup.style.display = 'none';
+                    periodicIntervalGroup.style.display = 'none';
+                }
+            }
+            
+            // Inicializar y añadir evento de cambio
+            updateFieldsVisibility();
+            scheduleTypeSelect.addEventListener('change', updateFieldsVisibility);
+        }
+    });
+</script>
+{% endblock %}
+{% endblock %}

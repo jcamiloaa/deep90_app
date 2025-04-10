@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "API Football Dashboard" %}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>{% trans "Panel de Control API Football" %}</h1>
+        <a href="{% url 'sports_data:create-task-wizard' %}" class="btn btn-primary">
+            <i class="fa fa-plus"></i> {% trans "Nueva Tarea" %}
+        </a>
+    </div>
+    
+    <div class="row">
+        <!-- Estadísticas en tarjetas -->
+        <div class="col-md-3 mb-3">
+            <div class="card text-white bg-primary">
+                <div class="card-body">
+                    <h5 class="card-title">{% trans "Endpoints Disponibles" %}</h5>
+                    <p class="card-text display-4">{{ endpoints_count }}</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="card text-white bg-warning">
+                <div class="card-body">
+                    <h5 class="card-title">{% trans "Tareas Pendientes" %}</h5>
+                    <p class="card-text display-4">{{ pending_tasks }}</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="card text-white bg-danger">
+                <div class="card-body">
+                    <h5 class="card-title">{% trans "Tareas Fallidas" %}</h5>
+                    <p class="card-text display-4">{{ failed_tasks }}</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="card text-white bg-success">
+                <div class="card-body">
+                    <h5 class="card-title">{% trans "Ver Todas" %}</h5>
+                    <a href="{% url 'sports_data:task-list' %}" class="btn btn-light">{% trans "Lista de Tareas" %}</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tareas recientes -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0">{% trans "Tareas Recientes" %}</h5>
+                </div>
+                <div class="card-body">
+                    {% if recent_tasks %}
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>{% trans "Nombre" %}</th>
+                                    <th>{% trans "Endpoint" %}</th>
+                                    <th>{% trans "Estado" %}</th>
+                                    <th>{% trans "Tipo" %}</th>
+                                    <th>{% trans "Creada" %}</th>
+                                    <th>{% trans "Acciones" %}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for task in recent_tasks %}
+                                <tr>
+                                    <td>{{ task.name }}</td>
+                                    <td>{{ task.endpoint.name }}</td>
+                                    <td>
+                                        {% if task.status == 'pending' %}
+                                        <span class="badge bg-warning">{% trans "Pendiente" %}</span>
+                                        {% elif task.status == 'running' %}
+                                        <span class="badge bg-info">{% trans "En ejecución" %}</span>
+                                        {% elif task.status == 'success' %}
+                                        <span class="badge bg-success">{% trans "Completado" %}</span>
+                                        {% elif task.status == 'failed' %}
+                                        <span class="badge bg-danger">{% trans "Fallido" %}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if task.schedule_type == 'immediate' %}
+                                        <span class="badge bg-primary">{% trans "Inmediata" %}</span>
+                                        {% elif task.schedule_type == 'scheduled' %}
+                                        <span class="badge bg-info">{% trans "Programada" %}</span>
+                                        {% elif task.schedule_type == 'periodic' %}
+                                        <span class="badge bg-secondary">{% trans "Periódica" %}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ task.created_at|date:"d/m/Y H:i" }}</td>
+                                    <td>
+                                        <a href="{% url 'sports_data:task-detail' task.id %}" class="btn btn-sm btn-primary">
+                                            <i class="fa fa-eye"></i> {% trans "Ver" %}
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        {% trans "No hay tareas recientes." %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
