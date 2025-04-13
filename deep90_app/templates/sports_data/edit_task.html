@@ -22,30 +22,7 @@
             <div class="mb-4">
                 <p class="text-muted">
                     {% trans "Endpoint" %}: <strong>{{ object.endpoint.name }}</strong>
-                    {% if parameters %}
-                    <br>
-                    {% trans "Parámetros configurados (no editables)" %}
-                    {% endif %}
                 </p>
-                
-                {% if parameters %}
-                <div class="mb-3">
-                    <div class="card bg-light">
-                        <div class="card-body">
-                            <table class="table table-sm mb-0">
-                                <tbody>
-                                    {% for key, value in parameters.items %}
-                                    <tr>
-                                        <th>{{ key }}</th>
-                                        <td>{{ value }}</td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-                {% endif %}
             </div>
             
             <form method="post">
@@ -60,6 +37,31 @@
                     </div>
                     {% endif %}
                 </div>
+                
+                <!-- Sección de parámetros -->
+                {% if param_form %}
+                <div class="card mb-4">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0">{% trans "Parámetros" %}</h5>
+                    </div>
+                    <div class="card-body">
+                        {% for field in param_form %}
+                        <div class="form-group mb-3">
+                            {{ field.label_tag }}
+                            {{ field }}
+                            {% if field.errors %}
+                            <div class="invalid-feedback d-block">
+                                {{ field.errors }}
+                            </div>
+                            {% endif %}
+                            {% if field.help_text %}
+                            <small class="form-text text-muted">{{ field.help_text }}</small>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
                 
                 <div class="form-group mb-3">
                     {{ form.schedule_type.label_tag }}

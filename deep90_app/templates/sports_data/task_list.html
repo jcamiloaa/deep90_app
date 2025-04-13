@@ -175,10 +175,13 @@
                                         <i class="fa fa-eye"></i>
                                     </a>
                                     
-                                    {% if task.status == 'pending' %}
+                                    {% if task.status != 'running' and task.status != 'cancelled' %}
                                     <a href="{% url 'sports_data:edit-task' task.id %}" class="btn btn-sm btn-warning">
                                         <i class="fa fa-edit"></i>
                                     </a>
+                                    {% endif %}
+                                    
+                                    {% if task.status == 'pending' %}
                                     <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#cancelTaskModal{{ task.id }}">
                                         <i class="fa fa-times"></i>
                                     </button>

@@ -4,6 +4,80 @@ from django.utils.translation import gettext_lazy as _
 from .models import ScheduledTask, APIEndpoint, APIParameter
 
 
+class GroupedModelChoiceField(forms.ModelChoiceField):
+    """ModelChoiceField que soporta agrupación de opciones."""
+    
+    def __init__(self, group_by_field, *args, **kwargs):
+        self.group_by_field = group_by_field
+        super().__init__(*args, **kwargs)
+    
+    def _get_choices(self):
+        """Obtiene opciones agrupadas para el campo."""
+        if hasattr(self, '_choices'):
+            return self._choices
+        return GroupedModelChoiceIterator(self)
+        
+    # Sobreescribimos la propiedad choices sin usar _set_choices
+    choices = property(_get_choices, lambda self, value: setattr(self, '_choices', value))
+
+
+class GroupedModelChoiceIterator:
+    """Iterador para opciones agrupadas."""
+    
+    def __init__(self, field):
+        self.field = field
+        self.queryset = field.queryset
+        self.group_by_field = field.group_by_field
+    
+    def __iter__(self):
+        if self.queryset is None:
+            yield ("", self.field.empty_label)
+            return
+            
+        # Determinar grupos basados en prefijos de endpoint
+        groups = {}
+        for item in self.queryset:
+            # Determinar el grupo basado en el prefijo del endpoint
+            endpoint_path = getattr(item, self.group_by_field)
+            
+            # Identificar el componente principal del endpoint
+            if '/' in endpoint_path:
+                # Para endpoints tipo 'teams/statistics', el grupo es 'teams'
+                # Caso especial para endpoints de cuotas pre-partido
+                if endpoint_path.startswith('odds/') and endpoint_path not in ['odds/live', 'odds/live/bets']:
+                    group_key = 'Odds-Prematch'
+                else:
+                    group_key = endpoint_path.split('/')[0].capitalize()
+            else:
+                # Para endpoints simples como 'teams', 'leagues', etc.
+                if endpoint_path in ['teams', 'leagues', 'venues', 'injuries', 'predictions', 'coachs', 'players', 'fixtures', 'standings', 'countries', 'transfers', 'trophies', 'sidelined']:
+                    group_key = endpoint_path.capitalize()
+                elif endpoint_path == 'odds':
+                    group_key = 'Odds-Prematch'  # Caso especial para endpoint principal de cuotas pre-partido
+                else:
+                    group_key = 'General'
+                
+            if group_key not in groups:
+                groups[group_key] = []
+            groups[group_key].append((item.pk, self._get_choice_label(item)))
+        
+        # Ordenar los grupos y devolver las opciones agrupadas
+        if self.field.empty_label is not None:
+            yield ("", self.field.empty_label)
+        
+        for group_name in sorted(groups.keys()):
+            group_items = groups[group_name]
+            yield (group_name, group_items)
+    
+    def _get_choice_label(self, item):
+        """Obtiene la etiqueta para una opción."""
+        endpoint_path = getattr(item, "endpoint")
+        if '/' in endpoint_path:
+            # Para endpoints tipo 'teams/statistics', mostrar solo la parte final
+            return f"{item.name} ({endpoint_path.split('/')[-1]})"
+        return f"{item.name} ({endpoint_path})"
+
+
 class DynamicEndpointForm(forms.Form):
     """Formulario base para endpoints con parámetros dinámicos."""
     
@@ -88,8 +162,9 @@ class TaskScheduleForm(forms.ModelForm):
 
 class EndpointSelectionForm(forms.Form):
     """Formulario para seleccionar un endpoint."""
-    endpoint = forms.ModelChoiceField(
-        queryset=APIEndpoint.objects.all(),
+    endpoint = GroupedModelChoiceField(
+        queryset=APIEndpoint.objects.all().order_by('endpoint'),
+        group_by_field='endpoint',
         label=_("Seleccione un endpoint"),
         empty_label=_("Seleccione..."),
         widget=forms.Select(attrs={'class': 'form-control'})

@@ -7,6 +7,7 @@ from django.conf import settings
 from django_celery_beat.models import PeriodicTask, IntervalSchedule
 
 from .models import ScheduledTask, APIResult
+from .services import ResponseProcessor
 
 
 @shared_task
@@ -37,11 +38,24 @@ def execute_api_request(task_id: int) -> Dict[str, Any]:
         # Construye la URL completa
         url = f"{settings.API_SPORTS_BASE_URL.rstrip('/')}/{task.endpoint.endpoint.lstrip('/')}"
         
+        # Procesar parámetros: solo enviar los que tienen valor
+        params = None
+        if task.endpoint.has_parameters and task.parameters:
+            # Filtrar para eliminar valores vacíos
+            params = {k: v for k, v in task.parameters.items() if v not in ('', None)}
+            
+            # Si hay parámetros requeridos para este endpoint, asegurar que están presentes
+            required_params = list(task.endpoint.parameters.filter(required=True).values_list('name', flat=True))
+            missing_params = [param for param in required_params if param not in params]
+            
+            if missing_params:
+                raise ValueError(f"Faltan parámetros requeridos: {', '.join(missing_params)}")
+        
         # Realiza la llamada a la API
         response = requests.get(
             url=url,
             headers=headers,
-            params=task.parameters if task.parameters else None,
+            params=params,
             timeout=30
         )
         
@@ -62,6 +76,10 @@ def execute_api_request(task_id: int) -> Dict[str, Any]:
         task.status = 'success' if response.status_code == 200 else 'failed'
         task.save(update_fields=['status'])
         
+        # Procesar los datos estructurados si la respuesta fue exitosa
+        if response.status_code == 200:
+            ResponseProcessor.process_result(result.id)
+            
         return {
             'task_id': task_id,
             'result_id': result.id,

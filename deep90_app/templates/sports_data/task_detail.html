@@ -16,11 +16,15 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1>{{ task.name }}</h1>
         <div class="btn-group">
-            {% if task.status == 'pending' %}
-            <!-- Solo mostrar botones de editar/cancelar si la tarea está pendiente -->
+            {% if task.status != 'running' and task.status != 'cancelled' %}
+            <!-- Permitir editar tareas en cualquier estado excepto 'running' y 'cancelled' -->
             <a href="{% url 'sports_data:edit-task' task.id %}" class="btn btn-warning">
                 <i class="fa fa-edit"></i> {% trans "Editar" %}
             </a>
+            {% endif %}
+            
+            {% if task.status == 'pending' %}
+            <!-- Solo mostrar botón de cancelar si la tarea está pendiente -->
             <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#cancelTaskModal">
                 <i class="fa fa-times"></i> {% trans "Cancelar Tarea" %}
             </button>

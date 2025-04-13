@@ -266,22 +266,34 @@ class ResultDetailView(LoginRequiredMixin, AdminRequiredMixin, DetailView):
 
 
 class EditTaskView(LoginRequiredMixin, AdminRequiredMixin, UpdateView):
-    """Vista para editar tareas que aún no se hayan ejecutado."""
+    """Vista para editar tareas."""
     model = ScheduledTask
     form_class = TaskScheduleForm
     template_name = 'sports_data/edit_task.html'
     
     def get_queryset(self):
-        # Solo permitir editar tareas pendientes o programadas que no se hayan ejecutado
-        return ScheduledTask.objects.filter(status='pending')
+        # Permitir editar tareas pendientes, completadas o fallidas
+        # No permitimos editar tareas en ejecución
+        return ScheduledTask.objects.exclude(status='running')
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         task = self.get_object()
         
-        # Mostrar los parámetros de la tarea si existen
-        if task.parameters:
-            context['parameters'] = task.parameters
+        # Crear el formulario para editar los parámetros
+        if task.endpoint.has_parameters:
+            # Si hay datos POST, usamos esos datos para inicializar el formulario
+            if self.request.method == 'POST':
+                context['param_form'] = ParametersForm(
+                    endpoint_id=task.endpoint.id, 
+                    data=self.request.POST
+                )
+            else:
+                # Si no hay POST, inicializamos con los parámetros actuales
+                context['param_form'] = ParametersForm(
+                    endpoint_id=task.endpoint.id, 
+                    initial=task.parameters
+                )
         
         return context
     
@@ -291,6 +303,24 @@ class EditTaskView(LoginRequiredMixin, AdminRequiredMixin, UpdateView):
         with transaction.atomic():
             # Guardar la tarea con los nuevos datos
             updated_task = form.save(commit=False)
+            
+            # Si la tarea ya fue ejecutada (success o failed), cambiar estado a pending
+            if task.status in ['success', 'failed']:
+                updated_task.status = 'pending'
+            
+            # Procesar los parámetros del formulario si el endpoint tiene parámetros
+            if task.endpoint.has_parameters:
+                param_form = ParametersForm(
+                    endpoint_id=task.endpoint.id,
+                    data=self.request.POST
+                )
+                
+                if param_form.is_valid():
+                    # Actualizar los parámetros con los valores del formulario
+                    updated_task.parameters = param_form.cleaned_data
+                else:
+                    # Si el formulario de parámetros no es válido, mostrar errores
+                    return self.form_invalid(form)
             
             # Si la tarea era periódica y hay una tarea de Celery Beat asociada, actualizarla o eliminarla
             if task.celery_task_id:
@@ -324,8 +354,13 @@ class EditTaskView(LoginRequiredMixin, AdminRequiredMixin, UpdateView):
                 
             updated_task.save()
             
-        messages.success(self.request, f'Tarea "{updated_task.name}" actualizada correctamente.')
+        messages.success(self.request, f'Tarea "{updated_task.name}" actualizada correctamente y puesta en espera para la próxima ejecución.')
         return HttpResponseRedirect(reverse('sports_data:task-detail', kwargs={'pk': task.id}))
+        
+    def form_invalid(self, form):
+        # Este método se llama cuando hay errores de validación en el formulario principal
+        # o en el formulario de parámetros
+        return self.render_to_response(self.get_context_data(form=form))
 
 
 class CancelTaskView(LoginRequiredMixin, AdminRequiredMixin, TemplateView):
