@@ -83,10 +83,46 @@ class FixtureDataAdmin(admin.ModelAdmin):
 
 @admin.register(LeagueData)
 class LeagueDataAdmin(admin.ModelAdmin):
-    list_display = ['league_id', 'name', 'country', 'season', 'type', 'is_current']
-    list_filter = ['country', 'type', 'is_current']
+    list_display = ['league_id', 'name', 'country', 'season', 'season_start', 'season_end','type', 'is_current']
+    list_filter = ['country', 'type', 'is_current', 'season', 'season_start', 'season_end','coverage_fixtures', 'coverage_players', 'coverage_predictions']
     search_fields = ['name', 'country']
     readonly_fields = ['result']
+    
+    fieldsets = (
+        ('Información básica', {
+            'fields': ('result', 'league_id', 'name', 'type', 'logo')
+        }),
+        ('País', {
+            'fields': ('country', 'country_code', 'flag')
+        }),
+        ('Temporada', {
+            'fields': ('season', 'season_start', 'season_end', 'is_current', 'standings')
+        }),
+        ('Cobertura de Partidos', {
+            'classes': ('collapse',),
+            'fields': (
+                'coverage_fixtures',
+                'coverage_fixtures_events',
+                'coverage_fixtures_lineups',
+                'coverage_fixtures_statistics_fixtures',
+                'coverage_fixtures_statistics_players',
+            )
+        }),
+        ('Cobertura de Jugadores', {
+            'classes': ('collapse',),
+            'fields': (
+                'coverage_players',
+                'coverage_top_scorers',
+                'coverage_top_assists',
+                'coverage_top_cards',
+                'coverage_injuries',
+            )
+        }),
+        ('Otras Coberturas', {
+            'classes': ('collapse',),
+            'fields': ('coverage_predictions', 'coverage_odds')
+        }),
+    )
 
 
 @admin.register(StandingData)

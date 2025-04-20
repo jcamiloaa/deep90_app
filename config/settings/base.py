@@ -88,6 +88,7 @@ THIRD_PARTY_APPS = [
 LOCAL_APPS = [
     "deep90_app.users",
     "deep90_app.apps.sports_data",
+    "deep90_app.apps.whatsapp",
 
 ]
 # https://docs.djangoproject.com/en/dev/ref/settings/#installed-apps
@@ -363,11 +364,26 @@ WHATSAPP_ACCESS_TOKEN = env("WHATSAPP_ACCESS_TOKEN")
 WHATSAPP_PHONE_NUMBER_ID = env("WHATSAPP_PHONE_NUMBER_ID")
 WHATSAPP_VERSION_API = env("WHATSAPP_VERSION_API", default="v22.0")  # Añadida esta línea con un valor por defecto
 
+# WhatsApp Flows Configuration
+# ------------------------------------------------------------------------------
+WHATSAPP_PRIVATE_KEY_PATH = env("WHATSAPP_PRIVATE_KEY_PATH", default=str(BASE_DIR / "private_key.pem"))
+
 # OpenAI API Key
 # ------------------------------------------------------------------------------
 OPENAI_API_KEY = env("OPENAI_API_KEY")
-ASSISTANT_ID = env("ASSISTANT_ID")
+ASSISTANT_ID_FREE = env("ASSISTANT_ID_FREE")
+ASSISTANT_ID_PAY = env("ASSISTANT_ID_PAY")
+ASSISTANT_ID_PRO = env("ASSISTANT_ID_PRO")
+
+
 WHATSAPP_FLOW_SIGN_UP = env("WHATSAPP_FLOW_SIGN_UP")
+WHATSAPP_FLOW_SIGN_UP_SCREEM = env("WHATSAPP_FLOW_SIGN_UP_SCREEM")
+
+WHATSAPP_FLOW_LIVE_RESULT = env("WHATSAPP_FLOW_LIVE_RESULT")
+WHATSAPP_FLOW_LIVE_RESULT_SCREEM = env("WHATSAPP_FLOW_LIVE_RESULT_SCREEM")
+WHATSAPP_FLOW_LIVE_RESULT_TOKEN = env("WHATSAPP_FLOW_LIVE_RESULT_TOKEN")
+
+
 WHATSAPP_FLOW_MODE = env("WHATSAPP_FLOW_MODE")
 WHATSAPP_FLOW_VERSION_MESSAGES = env("WHATSAPP_FLOW_VERSION_MESSAGES")
 
@@ -380,3 +396,11 @@ WHATSAPP_FLOW_VERSION_MESSAGES = env("WHATSAPP_FLOW_VERSION_MESSAGES")
 
 API_FOOTBALL_KEY = env("API_FOOTBALL_KEY")
 API_SPORTS_BASE_URL = env("API_SPORTS_BASE_URL", default="https://v3.football.api-sports.io")
+
+
+# WhatsApp Bot Configuration
+# ------------------------------------------------------------------------------
+DAILY_MESSAGES_LIMIT = env.int("DAILY_MESSAGES_LIMIT", default=5)   
+URL_PLANS = env("URL_PLANS", default="https://www.deep90.com/#pricing")
+URL_SUPPORT = env("URL_SUPPORT", default="https://www.deep90.com")
+

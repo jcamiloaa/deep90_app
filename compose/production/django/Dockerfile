@@ -1,4 +1,3 @@
-
 # define an alias for the specific python version used in this file.
 FROM docker.io/python:3.12.9-slim-bookworm AS python
 
@@ -81,6 +80,11 @@ RUN chmod +x /start-celerybeat
 COPY --chown=django:django ./compose/production/django/celery/flower/start /start-flower
 RUN sed -i 's/\r$//g' /start-flower
 RUN chmod +x /start-flower
+
+# Copiar el archivo de clave privada para WhatsApp Flows
+COPY ./private_key.pem /app/private_key.pem
+RUN chmod 600 /app/private_key.pem
+RUN chown django:django /app/private_key.pem
 
 
 # copy application code to WORKDIR

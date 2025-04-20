@@ -239,6 +239,20 @@ class LeagueData(models.Model):
     standings = models.BooleanField(_("Tiene clasificaciones"), default=False)
     is_current = models.BooleanField(_("Temporada actual"), default=False)
     
+    # Campos de cobertura
+    coverage_fixtures = models.BooleanField(_("Cobertura fixtures"), default=False)
+    coverage_fixtures_events = models.BooleanField(_("Cobertura eventos"), default=False)
+    coverage_fixtures_lineups = models.BooleanField(_("Cobertura alineaciones"), default=False)
+    coverage_fixtures_statistics_players = models.BooleanField(_("Cobertura estadísticas jugadores"), default=False)
+    coverage_fixtures_statistics_fixtures = models.BooleanField(_("Cobertura estadísticas partidos"), default=False)
+    coverage_players = models.BooleanField(_("Cobertura jugadores"), default=False)
+    coverage_top_scorers = models.BooleanField(_("Cobertura goleadores"), default=False)
+    coverage_top_assists = models.BooleanField(_("Cobertura asistencias"), default=False)
+    coverage_top_cards = models.BooleanField(_("Cobertura tarjetas"), default=False)
+    coverage_injuries = models.BooleanField(_("Cobertura lesiones"), default=False)
+    coverage_predictions = models.BooleanField(_("Cobertura predicciones"), default=False)
+    coverage_odds = models.BooleanField(_("Cobertura apuestas"), default=False)
+    
     class Meta:
         verbose_name = _("Datos de Liga")
         verbose_name_plural = _("Datos de Ligas")

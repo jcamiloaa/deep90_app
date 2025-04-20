@@ -23,6 +23,7 @@ urlpatterns = [
     path("users/", include("deep90_app.users.urls", namespace="users")),
     path("accounts/", include("allauth.urls")),
     # Your stuff: custom urls includes go here
+    path("whatsapp/", include("deep90_app.apps.whatsapp.urls", namespace="whatsapp")),
     path("sports-data/", include("deep90_app.apps.sports_data.urls", namespace="sports_data")),
     # Media files
     *static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT),

@@ -1,0 +1,1 @@
+default_app_config = 'deep90_app.apps.whatsapp.apps.WhatsAppConfig'

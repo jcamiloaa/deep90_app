@@ -127,12 +127,11 @@ class ResponseProcessor:
         
         # Verificar si es una respuesta válida
         if not data.get('response'):
-            # Si no hay respuesta válida, eliminamos todos los datos existentes
-            LeagueData.objects.all().delete()
             return
         
         # Eliminar todos los datos existentes antes de cargar los nuevos
-        LeagueData.objects.all().delete()
+        # Esto garantiza que no haya datos históricos, solo los más recientes
+        LeagueData.objects.filter(result__task__endpoint=result.task.endpoint).delete()
         
         # Iterar a través de cada liga en la respuesta
         for league_data in data['response']:
@@ -144,6 +143,10 @@ class ResponseProcessor:
                 # Si hay temporadas, procesar cada una
                 if seasons:
                     for season in seasons:
+                        # Obtener información de cobertura
+                        coverage = season.get('coverage', {})
+                        fixtures_coverage = coverage.get('fixtures', {})
+                        
                         LeagueData.objects.create(
                             result=result,
                             league_id=league.get('id', 0),
@@ -156,8 +159,22 @@ class ResponseProcessor:
                             season=season.get('year'),
                             season_start=season.get('start'),
                             season_end=season.get('end'),
-                            standings=season.get('coverage', {}).get('standings', False),
-                            is_current=season.get('current', False)
+                            standings=coverage.get('standings', False),
+                            is_current=season.get('current', False),
+                            
+                            # Campos de cobertura
+                            coverage_fixtures=bool(fixtures_coverage),
+                            coverage_fixtures_events=fixtures_coverage.get('events', False),
+                            coverage_fixtures_lineups=fixtures_coverage.get('lineups', False),
+                            coverage_fixtures_statistics_players=fixtures_coverage.get('statistics_players', False),
+                            coverage_fixtures_statistics_fixtures=fixtures_coverage.get('statistics_fixtures', False),
+                            coverage_players=coverage.get('players', False),
+                            coverage_top_scorers=coverage.get('top_scorers', False),
+                            coverage_top_assists=coverage.get('top_assists', False),
+                            coverage_top_cards=coverage.get('top_cards', False),
+                            coverage_injuries=coverage.get('injuries', False),
+                            coverage_predictions=coverage.get('predictions', False),
+                            coverage_odds=coverage.get('odds', False)
                         )
                 else:
                     # Si no hay temporadas, crear un registro básico
