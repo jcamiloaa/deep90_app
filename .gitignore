@@ -215,6 +215,8 @@ Network Trash Folder
 Temporary Items
 .apdisk
 
+# Certificate files
+*.pem
 
 ### SublimeText template
 # Cache files for Sublime Text
