@@ -32,6 +32,57 @@ class WhatsAppService:
         # API endpoints
         self.base_url = f"https://graph.facebook.com/{self.version}"
         self.send_message_url = f"{self.base_url}/{self.phone_number_id}/messages"
+
+    def log_message(self, phone_number, content, message_type='text', is_from_user=False, message_id=None, request_json=None, response_json=None):
+        """
+        Log a message to the database for record-keeping.
+        
+        Args:
+            phone_number: The WhatsApp phone number
+            content: The content of the message
+            message_type: The type of the message (text, button, list, flow, etc)
+            is_from_user: Whether the message is from the user (False for outgoing messages)
+            message_id: Optional message ID for tracking
+            request_json: Complete JSON of the request (webhook or API call)
+            response_json: Complete JSON of the response
+            
+        Returns:
+            The created Message object or None if creation failed
+        """
+        try:
+            # Get the user
+            whatsapp_user = WhatsAppUser.objects.get(phone_number=phone_number)
+            
+            # Get or create a conversation for system messages if needed
+            conversation, created = Conversation.objects.get_or_create(
+                user=whatsapp_user,
+                defaults={
+                    'thread_id': f"system_conversation_{phone_number}",
+                    'is_active': False
+                },
+                thread_id__startswith="system_conversation_"
+            )
+            
+            # Create the message record
+            message = Message.objects.create(
+                conversation=conversation,
+                message_id=message_id,
+                is_from_user=is_from_user,
+                content=content,
+                message_type=message_type,
+                request_json=request_json,
+                response_json=response_json
+            )
+            
+            logger.debug(f"Message logged: {message}")
+            return message
+            
+        except WhatsAppUser.DoesNotExist:
+            logger.warning(f"Attempted to log message for nonexistent user: {phone_number}")
+            return None
+        except Exception as e:
+            logger.error(f"Failed to log message: {e}")
+            return None
     
     def verify_webhook(self, mode, token, challenge):
         """
@@ -96,6 +147,13 @@ class WhatsAppService:
             
             if response.status_code != 200:
                 logger.error(f"Failed to send text message: {response.text}")
+            else:
+                # Log the sent message to the database
+                try:
+                    message_id = response.json().get('messages', [{}])[0].get('id', None)
+                    self.log_message(to, text, 'text', False, message_id, request_json=data, response_json=response.json())
+                except Exception as e:
+                    logger.error(f"Error logging sent text message: {e}")
             
             return response
         
@@ -146,6 +204,17 @@ class WhatsAppService:
             
             if response.status_code != 200:
                 logger.error(f"Failed to send template: {response.text}")
+            else:
+                # Log the sent template message
+                try:
+                    message_id = response.json().get('messages', [{}])[0].get('id', None)
+                    # Create a readable content for logging
+                    content = f"Plantilla: {template_name} ({language})"
+                    if components:
+                        content += f"\nComponentes: {json.dumps(components, ensure_ascii=False)}"
+                    self.log_message(to, content, 'template', False, message_id, request_json=data, response_json=response.json())
+                except Exception as e:
+                    logger.error(f"Error logging sent template message: {e}")
             
             return response
         
@@ -195,6 +264,16 @@ class WhatsAppService:
             
             if response.status_code != 200:
                 logger.error(f"Failed to send button template: {response.text}")
+            else:
+                # Log the sent button message
+                try:
+                    message_id = response.json().get('messages', [{}])[0].get('id', None)
+                    # Create a readable content for logging
+                    button_labels = ", ".join([btn.get('reply', {}).get('title', 'Unknown') for btn in buttons])
+                    content = f"{text}\n\nBotones: [{button_labels}]"
+                    self.log_message(to, content, 'button', False, message_id, request_json=data, response_json=response.json())
+                except Exception as e:
+                    logger.error(f"Error logging sent button message: {e}")
             
             return response
         
@@ -253,6 +332,16 @@ class WhatsAppService:
             
             if response.status_code != 200:
                 logger.error(f"Failed to send list template: {response.text}")
+            else:
+                # Log the sent list message
+                try:
+                    message_id = response.json().get('messages', [{}])[0].get('id', None)
+                    # Create a readable content for logging
+                    section_titles = [section.get('title', 'Unnamed Section') for section in sections]
+                    content = f"{text}\n\nMenú: {button_text}\nSecciones: {', '.join(section_titles)}"
+                    self.log_message(to, content, 'list', False, message_id, request_json=data, response_json=response.json())
+                except Exception as e:
+                    logger.error(f"Error logging sent list message: {e}")
             
             return response
         
@@ -320,6 +409,14 @@ class WhatsAppService:
             
             if response.status_code != 200:
                 logger.error(f"Failed to send registration flow: {response.text}")
+            else:
+                # Log the sent flow message
+                try:
+                    message_id = response.json().get('messages', [{}])[0].get('id', None)
+                    content = "¡Completa tu perfil para personalizar tu experiencia en Deep90!"
+                    self.log_message(to, content, 'flow_registration', False, message_id, request_json=data, response_json=response.json())
+                except Exception as e:
+                    logger.error(f"Error logging sent registration flow message: {e}")
             
             return response
         
@@ -384,6 +481,14 @@ class WhatsAppService:
             
             if response.status_code != 200:
                 logger.error(f"Failed to send live results flow: {response.text}")
+            else:
+                # Log the sent flow message
+                try:
+                    message_id = response.json().get('messages', [{}])[0].get('id', None)
+                    content = "¡Consulta los partidos que se están jugando ahora mismo!"
+                    self.log_message(to, content, 'flow_live_results', False, message_id, request_json=data, response_json=response.json())
+                except Exception as e:
+                    logger.error(f"Error logging sent live results flow message: {e}")
             
             return response
         

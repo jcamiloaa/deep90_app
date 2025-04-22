@@ -18,25 +18,30 @@ class AssistantManager:
     def __init__(self):
         """Inicializar el cliente OpenAI y cargar IDs de asistentes."""
         self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
-        self.assistant_id_free = settings.ASSISTANT_ID_FREE
-        self.assistant_id_pay = settings.ASSISTANT_ID_PAY
-        self.assistant_id_pro = settings.ASSISTANT_ID_PRO
+        self.assistant_id = settings.ASSISTANT_ID_PAY
     
-    def get_assistant_for_user(self, user):
+    def get_assistant_for_user(self, user, conversation_type=None):
         """
-        Determina qué asistente usar basado en la suscripción del usuario.
+        Obtiene el ID del asistente según el usuario y el tipo de conversación.
         
         Args:
-            user: Objeto WhatsAppUser
+            user: Objeto WhatsAppUser o diccionario con información del usuario
+            conversation_type: Tipo de conversación (opcional, de la clase ConversationType)
             
         Returns:
-            ID del asistente apropiado
+            ID del asistente correspondiente
         """
-        if user.subscription_plan == SubscriptionPlan.PRO:
-            return self.assistant_id_pro
-        elif user.subscription_plan == SubscriptionPlan.PREMIUM:
-            return self.assistant_id_pay
-        return self.assistant_id_free
+        # Si se especifica un tipo de conversación, devolver el asistente correspondiente
+        if conversation_type:
+            if conversation_type == 'PREDICTIONS':
+                return settings.ASSISTANT_ID_PREDICTIONS
+            elif conversation_type == 'LIVE_ODDS':
+                return settings.ASSISTANT_ID_LIVE_ODDS
+            elif conversation_type == 'BETTING':
+                return settings.ASSISTANT_ID_BETTING
+        
+        # Por defecto, devolver el asistente general
+        return self.assistant_id
     
     def create_thread(self):
         """
@@ -93,16 +98,15 @@ class AssistantManager:
             ID de la ejecución
         """
         try:
-            # Prepara las funciones disponibles
-            available_tools = self._get_available_tools(tools_config)
+
             
             # Ejecuta el asistente
             run = self.client.beta.threads.runs.create(
                 thread_id=thread_id,
-                assistant_id=assistant_id,
-                tools=available_tools
+                assistant_id=assistant_id
+
             )
-            
+            # tools=available_tools
             return run.id
         except Exception as e:
             logger.error(f"Error al ejecutar asistente: {e}")
@@ -229,27 +233,7 @@ class AssistantManager:
             logger.error(f"Error al obtener mensajes del asistente: {e}")
             raise
     
-    def _get_available_tools(self, tools_config=None):
-        """
-        Devuelve la lista de herramientas disponibles para el asistente.
-        """
-        tools = [
-            {
-                "type": "function",
-                "function": {
-                    "name": "get_live_match_results",
-                    "description": "Always call this function to get the latest live football match results, even if you have already called it before in the same conversation. The data is updated every 15 seconds, so you should use it whenever the user asks about a match or requests updated results.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {},
-                        "additionalProperties": False,
-                        "required": []
-                    }
-                }
-            }
-        ]
-        return tools
-    
+
     def _execute_tool_function(self, function_name, function_args):
         """
         Ejecuta una función de herramienta específica.

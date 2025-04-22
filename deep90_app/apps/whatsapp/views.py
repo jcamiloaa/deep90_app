@@ -15,7 +15,7 @@ from rest_framework.response import Response
 from .services import WhatsAppService, OpenAIAssistantService
 from .models import WhatsAppUser, Conversation, Message, WhatsAppUserStatus, UserInput
 from ..sports_data.models import FixtureData
-from .tasks import process_whatsapp_message, process_assistant_response
+from .tasks import process_whatsapp_message
 from .flows import FootballDataFlow
 
 logger = logging.getLogger(__name__)
@@ -126,6 +126,57 @@ class WhatsAppWebhookView(View):
             if not contact:
                 logger.warning(f"Contact not found for message {message.get('id')}")
                 continue
+
+            # Log the message directly to ensure it's stored even if async processing fails
+            try:
+                wa_id = contact.get('wa_id')
+                message_id = message.get('id')
+                message_type = message.get('type', 'unknown')
+                
+                # Get message content based on type
+                content = ""
+                if message_type == 'text':
+                    content = message.get('text', {}).get('body', '')
+                elif message_type == 'interactive':
+                    interactive_data = message.get('interactive', {})
+                    interactive_type = interactive_data.get('type')
+                    if interactive_type == 'button_reply':
+                        button_id = interactive_data.get('button_reply', {}).get('id')
+                        button_title = interactive_data.get('button_reply', {}).get('title', '')
+                        content = f"Button: {button_title} ({button_id})"
+                    elif interactive_type == 'list_reply':
+                        list_id = interactive_data.get('list_reply', {}).get('id')
+                        list_title = interactive_data.get('list_reply', {}).get('title', '')
+                        content = f"List: {list_title} ({list_id})"
+                    else:
+                        content = f"Interactive ({interactive_type})"
+                elif message_type == 'location':
+                    location_data = message.get('location', {})
+                    latitude = location_data.get('latitude')
+                    longitude = location_data.get('longitude')
+                    content = f"Location: {latitude}, {longitude}"
+                else:
+                    content = f"Message of type {message_type}"
+                
+                # Prepare the complete webhook data for storage
+                # We use the full message and add the contact info for context
+                webhook_data = {
+                    'message': message,
+                    'contact': contact
+                }
+                
+                # Log the incoming message with complete JSON
+                self.whatsapp_service.log_message(
+                    wa_id, 
+                    content, 
+                    message_type, 
+                    True,  # is_from_user=True
+                    message_id,
+                    request_json=webhook_data,  # Store complete webhook data
+                    response_json=None  # No response for incoming messages
+                )
+            except Exception as e:
+                logger.error(f"Error logging incoming message: {e}")
             
             # Encolar tarea para procesar el mensaje en background con Celery
             process_whatsapp_message.delay(contact, message)
@@ -201,6 +252,10 @@ class WhatsAppFlowWebhookView(View):
     POST: Recepción de datos de formularios completados
     """
     
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.whatsapp_service = WhatsAppService()
+    
     def post(self, request, *args, **kwargs):
         """
         Maneja la recepción de datos de formularios completados en WhatsApp.
@@ -235,6 +290,18 @@ class WhatsAppFlowWebhookView(View):
                 flow_token=flow_token,
                 screen_id=screen_id,
                 data=input_data
+            )
+            
+            # También guardar como mensaje con el JSON completo para trazabilidad
+            content = f"Flow Input - Screen: {screen_id}"
+            self.whatsapp_service.log_message(
+                wa_id,
+                content,
+                'flow_input',
+                True,  # is_from_user=True
+                None,  # no message_id for flows
+                request_json=flow_data,
+                response_json={"status": "success"}
             )
             
             # Procesar los datos del formulario según el flujo y la pantalla
@@ -286,6 +353,10 @@ class FootballFlowDataView(View):
     navegar y consultar datos de partidos de fútbol de forma interactiva.
     """
     
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.whatsapp_service = WhatsAppService()
+    
     @method_decorator(csrf_exempt)
     def dispatch(self, *args, **kwargs):
         return super().dispatch(*args, **kwargs)
@@ -303,7 +374,6 @@ class FootballFlowDataView(View):
         logger.info(f"Request headers: {request.headers}")
         logger.info(f"Request method: {request.method}")
         logger.info(f"Request path: {request.path}")
-
 
         try:
             # Parsear el cuerpo de la solicitud
@@ -333,6 +403,38 @@ class FootballFlowDataView(View):
             # Utilizar la clase FootballDataFlow para manejar la solicitud y obtener la respuesta
             from .flows import FootballDataFlow
             response_data = FootballDataFlow.handle_flow_request(decrypted_data)
+            
+            # Intentar extraer información de identificación del usuario para registro
+            try:
+                if 'wa_id' in decrypted_data:
+                    wa_id = decrypted_data.get('wa_id')
+                    
+                    # Guardar el JSON de la solicitud y respuesta para trazabilidad
+                    screen_id = decrypted_data.get('screen', 'unknown')
+                    content = f"Football Flow Data - Screen: {screen_id}"
+                    
+                    # Almacenar datos de la solicitud y respuesta
+                    self.whatsapp_service.log_message(
+                        wa_id,
+                        content,
+                        'football_flow',
+                        True,  # is_from_user=True para la solicitud
+                        None,  # no message_id para flows
+                        request_json=decrypted_data
+                    )
+                    
+                    # Registrar también la respuesta como mensaje del sistema
+                    self.whatsapp_service.log_message(
+                        wa_id,
+                        f"Football Flow Response - Screen: {response_data.get('screen', 'unknown')}",
+                        'football_flow_response',
+                        False,  # is_from_user=False para la respuesta
+                        None,   # no message_id para la respuesta
+                        request_json=None,
+                        response_json=response_data
+                    )
+            except Exception as e:
+                logger.error(f"Error al guardar datos de flujo de fútbol: {e}")
             
             # Cifrar y devolver la respuesta
             encrypted_response = encrypt_response(response_data, aes_key, iv)

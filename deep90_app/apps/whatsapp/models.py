@@ -19,6 +19,15 @@ class WhatsAppUserStatus(models.TextChoices):
     BANNED = 'banned', _('Bloqueado')
 
 
+class ConversationType(models.TextChoices):
+    """Tipos de conversación según el asistente asignado."""
+    SYSTEM = 'SYSTEM', _('Sistema')
+    GENERAL = 'GENERAL', _('General')
+    PREDICTIONS = 'PREDICTIONS', _('Predicciones')
+    LIVE_ODDS = 'LIVE_ODDS', _('Cuotas en vivo')
+    BETTING = 'BETTING', _('Apuestas')
+
+
 class WhatsAppUser(models.Model):
     """Modelo para los usuarios de WhatsApp, independiente de User."""
     phone_number = models.CharField(_("Número de teléfono"), max_length=20, primary_key=True)
@@ -90,6 +99,14 @@ class Conversation(models.Model):
     thread_id = models.CharField(_("ID del hilo"), max_length=100)
     is_active = models.BooleanField(_("Activo"), default=True)
     preserve_context = models.BooleanField(_("Preservar contexto"), default=False, help_text=_("Si es True, el contexto de la conversación se preservará para usuarios premium"))
+    conversation_type = models.CharField(
+        _("Tipo de conversación"), 
+        max_length=20, 
+        choices=ConversationType.choices,
+        default=ConversationType.GENERAL
+    )
+    fixture_id = models.CharField(_("ID del partido"), max_length=100, null=True, blank=True, 
+                                help_text=_("ID del partido al que se refiere la conversación, si aplica"))
     created_at = models.DateTimeField(_("Fecha de creación"), default=timezone.now)
     updated_at = models.DateTimeField(_("Fecha de actualización"), auto_now=True)
     last_message_at = models.DateTimeField(_("Último mensaje"), auto_now_add=True)
@@ -102,15 +119,26 @@ class Conversation(models.Model):
             models.Index(fields=['is_active']),
             models.Index(fields=['user', 'is_active']),
             models.Index(fields=['preserve_context']),
+            models.Index(fields=['conversation_type']),
         ]
 
     def __str__(self):
-        return f"Conversación {self.id} - {self.user}"
+        return f"Conversación {self.id} - {self.user} - {self.conversation_type}"
 
     def update_last_message_time(self):
         """Actualiza la marca de tiempo del último mensaje."""
         self.last_message_at = timezone.now()
         self.save(update_fields=['last_message_at'])
+        
+    @property
+    def formatted_id(self):
+        """
+        Devuelve un ID formateado con el thread_id y el tipo de conversación.
+        """
+        if self.conversation_type == ConversationType.SYSTEM:
+            return f"system_conversation_{self.id}"
+        else:
+            return f"{self.thread_id}_{self.conversation_type}"
 
 
 class Message(models.Model):
@@ -126,6 +154,12 @@ class Message(models.Model):
     content = models.TextField(_("Contenido"))
     message_type = models.CharField(_("Tipo de mensaje"), max_length=20, default="text")
     created_at = models.DateTimeField(_("Fecha de creación"), default=timezone.now)
+    
+    # Nuevos campos para almacenar el JSON completo
+    request_json = models.JSONField(_("JSON de solicitud"), null=True, blank=True, 
+                                    help_text=_("JSON completo recibido del webhook o enviado a la API"))
+    response_json = models.JSONField(_("JSON de respuesta"), null=True, blank=True, 
+                                     help_text=_("JSON completo de respuesta de la API o enviado al cliente"))
     
     class Meta:
         verbose_name = _("Mensaje")

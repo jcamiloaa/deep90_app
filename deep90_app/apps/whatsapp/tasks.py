@@ -1,5 +1,6 @@
 import logging
 import time
+import json
 from datetime import datetime, timedelta
 from celery import shared_task
 from django.db import transaction
@@ -7,7 +8,7 @@ from django.conf import settings
 from django.utils import timezone
 from .services import WhatsAppService
 from .assistant_manager import AssistantManager
-from .models import WhatsAppUser, Conversation, Message, WhatsAppUserStatus, SubscriptionPlan
+from .models import WhatsAppUser, Conversation, Message, WhatsAppUserStatus, SubscriptionPlan, ConversationType
 from .sports_service import FootballDataService
 
 logger = logging.getLogger(__name__)
@@ -45,12 +46,6 @@ def process_whatsapp_message(contact_data, message_data):
                 "¡Únete a la nueva era del fútbol!\n\n"                
             )
             whatsapp_service.send_text_message(wa_id, welcome_message)
-            # # Small delay to ensure message delivery
-            # time.sleep(1)
-            # # Show the main menu to new users
-            # whatsapp_service.display_main_menu(wa_id)
-            # # Additional delay
-            # time.sleep(1)
         
         # Check if user is blacklisted
         if whatsapp_user.is_blacklisted:
@@ -89,7 +84,7 @@ def process_whatsapp_message(contact_data, message_data):
                     f"Conoce nuestros planes de suscripción en: {pricing_url}"
                 )
                 return
-                
+
         # Update user's last activity
         whatsapp_user.update_last_activity()
         
@@ -111,6 +106,10 @@ def process_whatsapp_message(contact_data, message_data):
                 # Convert list reply to text message for processing
                 list_text = f"list:{list_id}"
                 process_text_message(whatsapp_user, message_id, list_text)
+            elif interactive_type == 'nfm_reply':
+                # Process flow replies
+                nfm_data = interactive_data.get('nfm_reply', {})
+                process_flow_reply(whatsapp_user, message_id, nfm_data)
             else:
                 logger.warning(f"Unhandled interactive type: {interactive_type}")
                 whatsapp_service.send_text_message(
@@ -124,6 +123,9 @@ def process_whatsapp_message(contact_data, message_data):
             # Convert location to text message for the assistant
             location_text = f"location:{latitude},{longitude}"
             process_text_message(whatsapp_user, message_id, location_text)
+        elif message_type == 'flow':
+            nfm_data = message_data.get('nfm', {})
+            process_flow_reply(whatsapp_user, message_id, nfm_data)
         else:
             # For unhandled message types
             whatsapp_service.send_text_message(
@@ -165,96 +167,99 @@ def process_text_message(whatsapp_user, message_id, text):
             
         # If not in assistant mode, any text message should show the menu
         if not is_in_assistant_mode(whatsapp_user):
-            # whatsapp_service.send_text_message(
-            #     whatsapp_user.phone_number,
-            #     "📱 Explora nuestras opciones en el menú principal:"
-            # )
-            # time.sleep(0.5)
             whatsapp_service.display_main_menu(whatsapp_user.phone_number)
             return
         
         # Here we know the user is in assistant mode, so we process the message
             
-        # Check if FREE user has exceeded daily message limit
-        if whatsapp_user.subscription_plan == SubscriptionPlan.FREE:
-            today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
-            today_messages_count = Message.objects.filter(
-                conversation__user=whatsapp_user,
-                is_from_user=True,
-                created_at__gte=today_start
-            ).count()
-            
-            # Hard limit on daily messages for free users
-            if today_messages_count >= settings.DAILY_MESSAGES_LIMIT:
-                # Get URL from settings
-                pricing_url = getattr(settings, 'URL_PLANS', "https://www.deep90.com/#pricing")
-                
-                # Notify user about the limit and send pricing URL
-                logger.info(f"FREE user {whatsapp_user.phone_number} has exceeded daily message limit")
-                whatsapp_service.send_text_message(
-                    whatsapp_user.phone_number,
-                    f"Has alcanzado el límite de {settings.DAILY_MESSAGES_LIMIT} mensajes diarios para cuentas gratuitas. "
-                    "Para continuar usando el asistente sin límites, actualiza a un plan Premium o Pro.\n\n"
-                    f"Conoce nuestros planes de suscripción en: {pricing_url}"
-                )
-                return
+        # Check if user has exceeded daily message limit
+        today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_messages_count = Message.objects.filter(
+            conversation__user=whatsapp_user,
+            is_from_user=True,
+            created_at__gte=today_start
+        ).count()
         
-        # Try to get an active conversation or the most recent inactive one
-        conversation = Conversation.objects.filter(
+        # Hard limit on daily messages for all users
+        if today_messages_count >= settings.DAILY_MESSAGES_LIMIT:
+            # Get URL from settings
+            pricing_url = getattr(settings, 'URL_PLANS', "https://www.deep90.com/#pricing")
+            
+            # Notify user about the limit
+            logger.info(f"User {whatsapp_user.phone_number} has exceeded daily message limit")
+            whatsapp_service.send_text_message(
+                whatsapp_user.phone_number,
+                f"Has alcanzado el límite de {settings.DAILY_MESSAGES_LIMIT} mensajes diarios. "
+                f"Consulta nuestros planes en: {pricing_url}"
+            )
+            return
+        
+        # Try to get an active conversation for the current user
+        active_conversation = Conversation.objects.filter(
             user=whatsapp_user,
             is_active=True
         ).first()
         
-        # If no active conversation, check for a preserved one for premium users
-        if not conversation and whatsapp_user.subscription_plan != SubscriptionPlan.FREE:
-            conversation = Conversation.objects.filter(
+        # If we find an active conversation, use that one
+        if active_conversation:
+            conversation = active_conversation
+            conversation_type = active_conversation.conversation_type
+            thread_id = active_conversation.thread_id
+            
+            logger.info(f"Continuing existing conversation of type {conversation_type} with thread {thread_id}")
+        else:
+            # No active conversation, check for preserved ones based on type
+            # First try to find any preserved GENERAL conversation
+            preserved_conversation = Conversation.objects.filter(
                 user=whatsapp_user,
-                preserve_context=True
+                is_active=False,
+                preserve_context=True,
+                conversation_type=ConversationType.GENERAL
             ).order_by('-id').first()
             
-            if conversation:
+            thread_exists = False
+            if preserved_conversation:
                 # Validate that the thread still exists in OpenAI
                 try:
-                    messages = assistant_manager.get_assistant_messages(conversation.thread_id)
+                    messages = assistant_manager.get_assistant_messages(preserved_conversation.thread_id)
                     thread_exists = len(messages) > 0
                     if thread_exists:
                         # Reactivate the conversation
-                        conversation.is_active = True
-                        conversation.save()
-                        logger.info(f"Reactivated existing conversation for {whatsapp_user.phone_number}")
+                        preserved_conversation.is_active = True
+                        preserved_conversation.save()
+                        logger.info(f"Reactivated existing GENERAL conversation for {whatsapp_user.phone_number}")
+                        conversation = preserved_conversation
                     else:
-                        conversation = None
+                        preserved_conversation = None
                 except Exception as e:
                     logger.error(f"Error validating thread: {e}")
-                    conversation = None
-        
-        # If still no valid conversation, create a new one
-        if not conversation:
-            # Create a new thread
-            thread_id = assistant_manager.create_thread()
+                    preserved_conversation = None
             
-            # Create conversation record
-            conversation = Conversation.objects.create(
-                user=whatsapp_user,
-                thread_id=thread_id,
-                is_active=True,
-                # Premium users' conversations are preserved for context
-                preserve_context=(whatsapp_user.subscription_plan != SubscriptionPlan.FREE)
-            )
-            
-            # Add initial system context message
-            user_info = {
-                'name': whatsapp_user.full_name or whatsapp_user.profile_name or 'Usuario',
-                'subscription': whatsapp_user.subscription_plan,
-            }
-            
-            assistant_manager.add_message_to_thread(
-                thread_id,
-                f"Nuevo usuario con suscripción {user_info['subscription']}. " +
-                f"Su nombre es {user_info['name']}. " +
-                "Preséntate como un asistente experto en fútbol de Deep90.",
-                user_info
-            )
+            # If still no valid conversation, create a new one
+            if not preserved_conversation:
+                # Create a new thread
+                thread_id = assistant_manager.create_thread()
+                
+                # Create conversation record as GENERAL type
+                conversation = Conversation.objects.create(
+                    user=whatsapp_user,
+                    thread_id=thread_id,
+                    is_active=True,
+                    preserve_context=True,
+                    conversation_type=ConversationType.GENERAL
+                )
+                
+                # Add initial system context message
+                user_info = {
+                    'name': whatsapp_user.full_name or whatsapp_user.profile_name or 'Usuario',
+                }
+                
+                assistant_manager.add_message_to_thread(
+                    thread_id,
+                    f"Nuevo usuario. Su nombre es {user_info['name']}. " +
+                    "Preséntate como un asistente experto en fútbol de Deep90.",
+                    user_info
+                )
             
         with transaction.atomic():
             # Save user message to database
@@ -272,13 +277,22 @@ def process_text_message(whatsapp_user, message_id, text):
             # Add message to OpenAI thread
             user_info = {
                 'name': whatsapp_user.full_name or whatsapp_user.profile_name or 'Usuario',
-                'subscription': whatsapp_user.subscription_plan,
             }
             
             assistant_manager.add_message_to_thread(conversation.thread_id, text, user_info)
             
-            # Run the assistant with appropriate model based on subscription
-            assistant_id = assistant_manager.get_assistant_for_user(whatsapp_user)
+            # Determine which assistant to use based on conversation type
+            if conversation.conversation_type == ConversationType.PREDICTIONS:
+                assistant_id = settings.ASSISTANT_ID_PREDICTIONS
+            elif conversation.conversation_type == ConversationType.LIVE_ODDS:
+                assistant_id = settings.ASSISTANT_ID_LIVE_ODDS
+            elif conversation.conversation_type == ConversationType.BETTING:
+                assistant_id = settings.ASSISTANT_ID_BETTING
+            else:
+                # Default to general assistant
+                assistant_id = assistant_manager.get_assistant_for_user(whatsapp_user, conversation.conversation_type)
+            
+            # Run the assistant
             run_id = assistant_manager.run_assistant(conversation.thread_id, assistant_id)
             
             # Send typing indicator message
@@ -302,6 +316,273 @@ def process_text_message(whatsapp_user, message_id, text):
             "Lo siento, ha ocurrido un error al procesar tu mensaje. Por favor intenta nuevamente."
         )
         raise
+
+
+def process_flow_reply(whatsapp_user, message_id, nfm_data):
+    """Process interactive flow replies from WhatsApp users."""
+    whatsapp_service = WhatsAppService()
+    assistant_manager = AssistantManager()
+    
+    try:
+        # Extract data from the flow reply
+        name = nfm_data.get('name', '')
+        body = nfm_data.get('body', '')
+        
+        # Only process if we have response_json
+        if 'response_json' not in nfm_data:
+            logger.warning(f"Flow reply without response_json from user {whatsapp_user.phone_number}")
+            whatsapp_service.send_text_message(
+                whatsapp_user.phone_number,
+                "Lo siento, no he podido procesar tu respuesta del flujo. Por favor intenta nuevamente."
+            )
+            time.sleep(1)
+            whatsapp_service.display_main_menu(whatsapp_user.phone_number)
+            return
+        
+        # Parse the response_json
+        try:
+            response_data = json.loads(nfm_data.get('response_json', '{}'))
+        except json.JSONDecodeError:
+            logger.error(f"Invalid JSON in flow response from user {whatsapp_user.phone_number}")
+            whatsapp_service.send_text_message(
+                whatsapp_user.phone_number,
+                "Lo siento, hubo un problema al procesar la información. Por favor intenta nuevamente."
+            )
+            time.sleep(1)
+            whatsapp_service.display_main_menu(whatsapp_user.phone_number)
+            return
+        
+        # Check if it's from our live results flow
+        flow_id = response_data.get('id_flujo')
+        if flow_id == settings.WHATSAPP_FLOW_LIVE_RESULT:
+            fixture_id = response_data.get('fixture_id')
+            selected_action = response_data.get('selected_action')
+            
+            logger.info(f"Live results flow action: {selected_action}, Fixture ID: {fixture_id}")
+            
+            if selected_action == 'action_finish':
+                # Simply thank the user and display main menu
+                whatsapp_service.send_text_message(
+                    whatsapp_user.phone_number,
+                    "¡Gracias por consultar los resultados en vivo! ⚽\n\nRecuerda que puedes acceder a esta información en cualquier momento desde el menú principal."
+                )
+                time.sleep(1)
+                whatsapp_service.display_main_menu(whatsapp_user.phone_number)
+            
+            elif selected_action in ['action_predictions', 'action_live_odds', 'action_betting']:
+                # Map the action to the corresponding assistant ID
+                assistant_id = None
+                prompt_message = ""
+                
+                if selected_action == 'action_predictions':
+                    assistant_id = settings.ASSISTANT_ID_PREDICTIONS
+                    prompt_message = f"Hola, necesito ayuda con predicciones para el partido con ID: {fixture_id}. ¿Cuál es tu análisis?"
+                
+                elif selected_action == 'action_live_odds':
+                    assistant_id = settings.ASSISTANT_ID_LIVE_ODDS
+                    prompt_message = f"Hola, quiero saber las probabilidades en vivo para el partido con ID: {fixture_id}. ¿Cuáles son las cuotas actuales?"
+                
+                elif selected_action == 'action_betting':
+                    assistant_id = settings.ASSISTANT_ID_BETTING
+                    prompt_message = f"Hola, necesito recomendaciones de apuestas para el partido con ID: {fixture_id}. ¿Qué me recomiendas?"
+                
+                # Start a specialized assistant conversation with that prompt
+                start_specialized_assistant_conversation(whatsapp_user, assistant_id, prompt_message, fixture_id)
+            
+            else:
+                # Unknown action, display main menu
+                logger.warning(f"Unknown action in live results flow: {selected_action}")
+                whatsapp_service.send_text_message(
+                    whatsapp_user.phone_number,
+                    "No he podido procesar tu selección. Por favor intenta nuevamente desde el menú principal."
+                )
+                time.sleep(1)
+                whatsapp_service.display_main_menu(whatsapp_user.phone_number)
+        
+        else:
+            # Not from our recognized flows, display main menu
+            logger.warning(f"Unknown flow ID: {flow_id}")
+            whatsapp_service.send_text_message(
+                whatsapp_user.phone_number,
+                "No he podido identificar el flujo de interacción. Por favor selecciona una opción desde el menú principal."
+            )
+            time.sleep(1)
+            whatsapp_service.display_main_menu(whatsapp_user.phone_number)
+    
+    except Exception as e:
+        logger.error(f"Error processing flow reply: {e}")
+        whatsapp_service.send_text_message(
+            whatsapp_user.phone_number,
+            "Lo siento, ha ocurrido un error al procesar tu selección. Por favor intenta nuevamente."
+        )
+        time.sleep(1)
+        whatsapp_service.display_main_menu(whatsapp_user.phone_number)
+
+
+def start_specialized_assistant_conversation(whatsapp_user, assistant_id, prompt_message, fixture_id=None):
+    """
+    Start a conversation with a specialized assistant and send an initial prompt.
+    
+    Args:
+        whatsapp_user: The WhatsApp user object
+        assistant_id: The assistant ID to use
+        prompt_message: The initial message to send to the assistant
+        fixture_id: Optional fixture ID for context
+    """
+    whatsapp_service = WhatsAppService()
+    assistant_manager = AssistantManager()
+    
+    try:
+        # First deactivate any existing conversation
+        Conversation.objects.filter(user=whatsapp_user, is_active=True).update(is_active=False)
+        
+        # Determine conversation type based on assistant_id
+        conversation_type = ConversationType.GENERAL
+        if assistant_id == settings.ASSISTANT_ID_PREDICTIONS:
+            conversation_type = ConversationType.PREDICTIONS
+        elif assistant_id == settings.ASSISTANT_ID_LIVE_ODDS:
+            conversation_type = ConversationType.LIVE_ODDS
+        elif assistant_id == settings.ASSISTANT_ID_BETTING:
+            conversation_type = ConversationType.BETTING
+        
+        # Check if there's an existing conversation of the same type with this fixture_id
+        existing_conversation = None
+        if fixture_id:
+            existing_conversation = Conversation.objects.filter(
+                user=whatsapp_user,
+                conversation_type=conversation_type,
+                fixture_id=fixture_id,
+                is_active=False,
+                preserve_context=True
+            ).order_by('-id').first()
+        
+        # If found a valid conversation, verify thread exists
+        thread_exists = False
+        if existing_conversation:
+            try:
+                messages = assistant_manager.get_assistant_messages(existing_conversation.thread_id)
+                thread_exists = len(messages) > 0
+                logger.info(f"Thread {existing_conversation.thread_id} existe: {thread_exists}")
+            except Exception as e:
+                logger.error(f"Error verificando thread: {e}")
+                thread_exists = False
+        
+        # If we found a valid conversation with an existing thread, reactivate it
+        if existing_conversation and thread_exists:
+            existing_conversation.is_active = True
+            existing_conversation.save()
+            conversation = existing_conversation
+            thread_id = existing_conversation.thread_id
+            
+            # Add context message explaining the return to this conversation
+            user_info = {
+                'name': whatsapp_user.full_name or whatsapp_user.profile_name or 'Usuario',
+                'subscription': whatsapp_user.subscription_plan,
+                'fixture_id': fixture_id
+            }
+            
+            assistant_manager.add_message_to_thread(
+                thread_id,
+                f"El usuario ha vuelto a esta conversación sobre el partido con ID {fixture_id}. " +
+                f"Mantén el contexto y continúa desde donde lo dejaste.",
+                user_info
+            )
+        else:
+            # Create a new thread
+            thread_id = assistant_manager.create_thread()
+            
+            # Create a new conversation record with appropriate type
+            conversation = Conversation.objects.create(
+                user=whatsapp_user,
+                thread_id=thread_id,
+                is_active=True,
+                preserve_context=True,
+                conversation_type=conversation_type,
+                fixture_id=fixture_id
+            )
+        
+        # Send a welcome message 
+        welcome_msg = "🤖 *Modo Asistente Especializado Activado* 🤖\n\n"
+        
+        if conversation_type == ConversationType.PREDICTIONS:
+            welcome_msg += "Estoy conectándote con nuestro asistente de predicciones. Te ayudará a analizar el partido y proporcionarte predicciones basadas en datos históricos y estadísticas actuales."
+        elif conversation_type == ConversationType.LIVE_ODDS:
+            welcome_msg += "Estoy conectándote con nuestro asistente de probabilidades en vivo. Te mantendrá informado de las cuotas y probabilidades actualizadas para diferentes mercados de apuestas."
+        elif conversation_type == ConversationType.BETTING:
+            welcome_msg += "Estoy conectándote con nuestro asistente de apuestas. Te brindará recomendaciones personalizadas basadas en los datos y tendencias más recientes."
+        
+        welcome_msg += "\n\nPara salir, escribe 'salir' o 'exit'."
+        
+        whatsapp_service.send_text_message(
+            whatsapp_user.phone_number,
+            welcome_msg
+        )
+        
+        # Add context info for the assistant
+        user_info = {
+            'name': whatsapp_user.full_name or whatsapp_user.profile_name or 'Usuario',
+            'subscription': whatsapp_user.subscription_plan,
+            'fixture_id': fixture_id  # Include fixture ID in user info
+        }
+        
+        # Add an initial system message with context if it's a new conversation
+        if not thread_exists:
+            system_message = f"El usuario ha seleccionado analizar el partido con ID {fixture_id}. "
+            
+            if conversation_type == ConversationType.PREDICTIONS:
+                system_message += "Ayúdalo con predicciones para este partido basadas en datos históricos y estadísticas."
+            elif conversation_type == ConversationType.LIVE_ODDS:
+                system_message += "Proporciónale las probabilidades actuales y cuotas de apuestas para este partido."
+            elif conversation_type == ConversationType.BETTING:
+                system_message += "Ofrécele recomendaciones de apuestas para este partido basadas en datos y tendencias."
+            
+            assistant_manager.add_message_to_thread(
+                thread_id,
+                system_message,
+                user_info
+            )
+        
+        with transaction.atomic():
+            # Save user message to database
+            Message.objects.create(
+                conversation=conversation,
+                message_id=None,
+                is_from_user=True,
+                content=prompt_message,
+                message_type='text'
+            )
+            
+            # Update conversation last message time
+            conversation.update_last_message_time()
+            
+            # Add the user's prompt to the thread
+            assistant_manager.add_message_to_thread(thread_id, prompt_message, user_info)
+            
+            # Run the appropriate assistant
+            run_id = assistant_manager.run_assistant(thread_id, assistant_id)
+            
+            # Send typing indicator
+            whatsapp_service.send_text_message(
+                whatsapp_user.phone_number,
+                "⏳ Procesando..."
+            )
+            
+            # Queue task to check run completion
+            process_assistant_run.delay(
+                whatsapp_user.phone_number,
+                conversation.id,
+                thread_id,
+                run_id
+            )
+    
+    except Exception as e:
+        logger.error(f"Error starting specialized assistant conversation: {e}")
+        whatsapp_service.send_text_message(
+            whatsapp_user.phone_number,
+            "Lo siento, ha ocurrido un error al iniciar la conversación con el asistente especializado. Por favor intenta nuevamente."
+        )
+        time.sleep(1)
+        whatsapp_service.display_main_menu(whatsapp_user.phone_number)
 
 
 def is_in_assistant_mode(whatsapp_user):
@@ -395,64 +676,55 @@ def start_assistant_conversation(whatsapp_user):
         # Desactivar cualquier conversación activa existente
         Conversation.objects.filter(user=whatsapp_user, is_active=True).update(is_active=False)
         
-        # Para usuarios premium/pro, intentar restaurar una conversación previa con contexto preservado
+        # Intentar restaurar una conversación previa tipo GENERAL con contexto preservado
         preserved_conversation = None
         thread_exists = False
-        if whatsapp_user.subscription_plan != SubscriptionPlan.FREE:
-            preserved_conversation = Conversation.objects.filter(
-                user=whatsapp_user, 
-                is_active=False, 
-                preserve_context=True
-            ).order_by('-id').first()
-            
-            if preserved_conversation:
-                # Verificar que el thread aún existe en OpenAI
-                try:
-                    # Intenta obtener mensajes del thread para verificar que existe
-                    messages = assistant_manager.get_assistant_messages(preserved_conversation.thread_id)
-                    thread_exists = len(messages) > 0
-                    logger.info(f"Thread {preserved_conversation.thread_id} existe: {thread_exists}")
-                except Exception as e:
-                    logger.error(f"Error verificando thread: {e}")
-                    thread_exists = False
-                    
-                if thread_exists:
-                    logger.info(f"Usuario {whatsapp_user.subscription_plan} {whatsapp_user.phone_number}: Restaurando conversación previa con ID {preserved_conversation.id}")
-                else:
-                    logger.warning(f"Thread {preserved_conversation.thread_id} no existe o es inválido. Creando uno nuevo.")
-                    preserved_conversation = None
         
-        # Si encontramos una conversación preservada válida para usuarios premium/pro, reactivarla
+        preserved_conversation = Conversation.objects.filter(
+            user=whatsapp_user, 
+            is_active=False, 
+            preserve_context=True,
+            conversation_type=ConversationType.GENERAL
+        ).order_by('-id').first()
+        
+        if preserved_conversation:
+            # Verificar que el thread aún existe en OpenAI
+            try:
+                # Intenta obtener mensajes del thread para verificar que existe
+                messages = assistant_manager.get_assistant_messages(preserved_conversation.thread_id)
+                thread_exists = len(messages) > 0
+                logger.info(f"Thread {preserved_conversation.thread_id} existe: {thread_exists}")
+            except Exception as e:
+                logger.error(f"Error verificando thread: {e}")
+                thread_exists = False
+                
+            if thread_exists:
+                logger.info(f"Usuario {whatsapp_user.phone_number}: Restaurando conversación GENERAL previa con ID {preserved_conversation.id}")
+            else:
+                logger.warning(f"Thread {preserved_conversation.thread_id} no existe o es inválido. Creando uno nuevo.")
+                preserved_conversation = None
+        
+        # Si encontramos una conversación preservada válida, reactivarla
         if preserved_conversation and thread_exists:
             preserved_conversation.is_active = True
             preserved_conversation.save()
             conversation = preserved_conversation
             
-            # Mensaje de bienvenida de regreso
-            # whatsapp_service.send_text_message(
-            #     whatsapp_user.phone_number,
-            #     "🤖 *Modo Asistente Activado* 🤖\n\n"
-            #     "¡Hola de nuevo! He recuperado nuestra conversación anterior.\n"
-            #     "¿En qué puedo ayudarte ahora?\n\n"
-            #     "Para salir, escribe 'salir' o 'exit'."
-            # )
-            
             try:
                 # Añadir mensaje al thread explicando el regreso
                 user_info = {
                     'name': whatsapp_user.full_name or whatsapp_user.profile_name or 'Usuario',
-                    'subscription': whatsapp_user.subscription_plan,
                 }
                 
                 assistant_manager.add_message_to_thread(
                     preserved_conversation.thread_id,
-                    "El usuario ha regresado a la conversación. Es un usuario con suscripción " +
-                    f"{user_info['subscription']}. Mantén el contexto de las conversaciones anteriores.",
+                    "El usuario ha regresado a la conversación general. " +
+                    f"Su nombre es {user_info['name']}. Mantén el contexto de las conversaciones anteriores.",
                     user_info
                 )
                 
-                # Ejecutar el asistente con el modelo apropiado según la suscripción
-                assistant_id = assistant_manager.get_assistant_for_user(whatsapp_user)
+                # Ejecutar el asistente
+                assistant_id = assistant_manager.get_assistant_for_user(whatsapp_user, ConversationType.GENERAL)
                 run_id = assistant_manager.run_assistant(preserved_conversation.thread_id, assistant_id)
                 
                 # Encolar tarea para verificar la finalización de la ejecución
@@ -469,7 +741,7 @@ def start_assistant_conversation(whatsapp_user):
                 preserved_conversation.save()
                 create_new_conversation(whatsapp_user, assistant_manager, whatsapp_service)
         else:
-            # No hay conversación preservada válida o es usuario FREE, crear una nueva
+            # No hay conversación preservada válida, crear una nueva
             create_new_conversation(whatsapp_user, assistant_manager, whatsapp_service)
         
     except Exception as e:
@@ -493,8 +765,8 @@ def create_new_conversation(whatsapp_user, assistant_manager, whatsapp_service):
             user=whatsapp_user,
             thread_id=thread_id,
             is_active=True,
-            # Establecer preserve_context según el plan
-            preserve_context=(whatsapp_user.subscription_plan != SubscriptionPlan.FREE)
+            preserve_context=True,  # Always preserve context
+            conversation_type=ConversationType.GENERAL
         )
         
         # Enviar mensaje de bienvenida para el modo asistente
@@ -509,21 +781,20 @@ def create_new_conversation(whatsapp_user, assistant_manager, whatsapp_service):
         # Añadir mensaje inicial al thread
         user_info = {
             'name': whatsapp_user.full_name or whatsapp_user.profile_name or 'Usuario',
-            'subscription': whatsapp_user.subscription_plan,
         }
         
         assistant_manager.add_message_to_thread(
             thread_id,
             "El usuario acaba de activar el modo asistente en WhatsApp. " +
-            f"Su nombre es {user_info['name']} y tiene una suscripción {user_info['subscription']}. " +
+            f"Su nombre es {user_info['name']}. " +
             "Salúdalo como un asistente experto en fútbol y preséntate. " +
             "Ofrece tu ayuda para responder preguntas sobre fútbol, como resultados, próximos partidos, " +
             "clasificaciones, estadísticas de equipos o jugadores, etc.",
             user_info
         )
         
-        # Ejecutar el asistente con el modelo apropiado según la suscripción
-        assistant_id = assistant_manager.get_assistant_for_user(whatsapp_user)
+        # Ejecutar el asistente
+        assistant_id = assistant_manager.get_assistant_for_user(whatsapp_user, ConversationType.GENERAL)
         run_id = assistant_manager.run_assistant(thread_id, assistant_id)
         
         # Encolar tarea para verificar la finalización de la ejecución
@@ -543,22 +814,12 @@ def end_assistant_conversation(whatsapp_user):
     """End a conversation with the OpenAI Assistant."""
     whatsapp_service = WhatsAppService()
     
-    # Para usuarios con suscripción FREE, cerrar completamente la conversación
-    # Para usuarios PREMIUM y PRO, solo marcar como inactiva pero mantener el thread para contexto
-    if whatsapp_user.subscription_plan == SubscriptionPlan.FREE:
-        # End any active conversations completely for FREE users
-        Conversation.objects.filter(user=whatsapp_user, is_active=True).update(
-            is_active=False, 
-            preserve_context=False
-        )
-        logger.info(f"Usuario FREE {whatsapp_user.phone_number}: Conversación cerrada completamente")
-    else:
-        # For paid users, just mark the conversation as inactive but keep the thread
-        Conversation.objects.filter(user=whatsapp_user, is_active=True).update(
-            is_active=False, 
-            preserve_context=True
-        )
-        logger.info(f"Usuario Premium {whatsapp_user.phone_number}: Conversación preservada para contexto futuro")
+    # Mark all active conversations as inactive but preserve context
+    Conversation.objects.filter(user=whatsapp_user, is_active=True).update(
+        is_active=False, 
+        preserve_context=True
+    )
+    logger.info(f"Usuario {whatsapp_user.phone_number}: Conversación preservada para contexto futuro")
     
     # Send exit message
     whatsapp_service.send_text_message(

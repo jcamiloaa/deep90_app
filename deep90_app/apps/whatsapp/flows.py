@@ -69,6 +69,13 @@ class FootballDataFlow:
                 "fixture_details": {}  # Se llenará dinámicamente
             }
         },
+        "NEXT_STEP": {
+            "screen": "NEXT_STEP",
+            "data": {
+                "fixture_id": 0,  # Se llenará dinámicamente
+                "next_actions": []  # Se llenará dinámicamente
+            }
+        },
         "SUCCESS": {
             "screen": "SUCCESS",
             "data": {
@@ -225,11 +232,29 @@ class FootballDataFlow:
                     return cls._get_fixtures_screen(country_name)
                     
             elif screen == 'FIXTURE_DETAIL':
-                # Completar el flujo cuando se muestra la pantalla de detalles
-                logger.debug("Completando flujo desde pantalla FIXTURE_DETAIL")
-                success_response = dict(cls.SCREEN_RESPONSES["SUCCESS"])
-                success_response["data"]["extension_message_response"]["params"]["flow_token"] = flow_token
-                return success_response
+                # Mostrar opciones para los próximos pasos
+                fixture_id = data.get('fixture_id', 0)
+                return cls._get_next_step_screen(fixture_id)
+            
+            elif screen == 'NEXT_STEP':
+                # Procesar la selección de la siguiente acción
+                selected_action = cls._extract_from_data(data, prefix='action_', fallback_keys=['selected_action', 'next_step_form.selected_action'])
+                fixture_id = data.get('fixture_id', 0)
+                
+                logger.info(f"Acción seleccionada: {selected_action}")
+                
+                if selected_action == 'action_finish':
+                    # Completar el flujo cuando se selecciona finalizar
+                    logger.debug("Usuario seleccionó finalizar, completando flujo")
+                    success_response = dict(cls.SCREEN_RESPONSES["SUCCESS"])
+                    success_response["data"]["extension_message_response"]["params"]["flow_token"] = flow_token
+                    return success_response
+                
+                # Aquí se pueden manejar otras acciones como hablar con asistente para predicciones,
+                # probabilidades en vivo o apuestas, dependiendo de la integración necesaria
+                
+                # Por defecto, volver a la pantalla de países
+                return cls._get_countries_screen()
         
         # Si no se reconoce la acción o pantalla, volver a la pantalla inicial
         logger.warning(f"Acción no reconocida: {action}, Pantalla: {screen}")
@@ -253,17 +278,33 @@ class FootballDataFlow:
                 if '.' in key:
                     parts = key.split('.')
                     if len(parts) == 2 and parts[0] in data and isinstance(data[parts[0]], dict) and parts[1] in data[parts[0]]:
-                        return data[parts[0]][parts[1]]
+                        value = data[parts[0]][parts[1]]
+                        # Manejar si el valor es una lista (nuevo formato)
+                        if isinstance(value, list) and len(value) > 0:
+                            return value[0]  # Devuelve el primer elemento de la lista
+                        return value
                 elif key in data:
-                    return data.get(key)
+                    value = data.get(key)
+                    # Manejar si el valor es una lista (nuevo formato)
+                    if isinstance(value, list) and len(value) > 0:
+                        return value[0]  # Devuelve el primer elemento de la lista
+                    return value
         
         # Buscar en cualquier clave y valor
         for key, value in data.items():
-            if isinstance(value, str) and (not prefix or value.startswith(prefix)):
+            # Manejar si el valor es una lista (nuevo formato)
+            if isinstance(value, list) and len(value) > 0:
+                if not prefix or str(value[0]).startswith(prefix):
+                    return value[0]
+            elif isinstance(value, str) and (not prefix or value.startswith(prefix)):
                 return value
             elif isinstance(value, dict):
                 for subkey, subvalue in value.items():
-                    if isinstance(subvalue, str) and (not prefix or subvalue.startswith(prefix)):
+                    # Manejar si el subvalor es una lista (nuevo formato)
+                    if isinstance(subvalue, list) and len(subvalue) > 0:
+                        if not prefix or str(subvalue[0]).startswith(prefix):
+                            return subvalue[0]
+                    elif isinstance(subvalue, str) and (not prefix or subvalue.startswith(prefix)):
                         return subvalue
         
         return None
@@ -488,6 +529,38 @@ class FootballDataFlow:
             return cls._get_countries_screen()
     
     @classmethod
+    def _get_next_step_screen(cls, fixture_id):
+        """
+        Genera la pantalla con opciones para las próximas acciones después de ver los detalles del partido.
+        
+        Args:
+            fixture_id: ID del partido consultado
+            
+        Returns:
+            dict: Estructura de la pantalla para WhatsApp Flows.
+        """
+        logger.debug(f"Generando pantalla NEXT_STEP para partido ID: {fixture_id}")
+        
+        # Crear una copia de la respuesta base
+        screen_response = dict(cls.SCREEN_RESPONSES["NEXT_STEP"])
+        
+        # Actualizar ID del partido
+        screen_response["data"]["fixture_id"] = fixture_id
+        
+        # Preparar las próximas acciones disponibles
+        next_actions = [
+            {"id": "action_finish", "title": "Finalizar consulta"},
+            {"id": "action_predictions", "title": "Asistente para predicciones"},
+            {"id": "action_live_odds", "title": "Asistente para Probabilidades"},
+            {"id": "action_betting", "title": "Asistente para apuestas"}
+        ]
+        
+        screen_response["data"]["next_actions"] = next_actions
+        
+        # Convertir todos los objetos de traducción a strings para que sean serializables
+        return ensure_serializable(screen_response)
+    
+    @classmethod
     def generate_flow_json(cls):
         """
         Genera el JSON completo para WhatsApp Flows según la documentación oficial de Meta.
@@ -502,7 +575,8 @@ class FootballDataFlow:
                 "WELCOME": ["SELECT_COUNTRY"],
                 "SELECT_COUNTRY": ["SELECT_FIXTURE"],
                 "SELECT_FIXTURE": ["FIXTURE_DETAIL"],
-                "FIXTURE_DETAIL": []  # Terminal screen
+                "FIXTURE_DETAIL": ["NEXT_STEP"],
+                "NEXT_STEP": []  # Terminal screen
             },
             "screens": [
                 # Pantalla inicial: Bienvenida y selección de opciones
@@ -517,21 +591,34 @@ class FootballDataFlow:
                                 "name": "flow_path",
                                 "children": [
                                     {
-                                        "type": "TextSubheading",
-                                        "text": "Selecciona una opcion"
+                                        "type": "Image",
+                                        "src": "iVBORw0KGC",
+                                        "height": 60,
+                                        "scale-type": "cover"
                                     },
                                     {
-                                        "type": "Dropdown",
+                                        "type": "TextBody",
+                                        "markdown": True,
+                                        "text": [
+                                            "**Consulta partidos en vivo**, mediante el **asistente inteligente** que te ayuda con *estadísticas personalizadas* y obtener **recomendaciones para tus apuestas.**",                    
+                                            "Funciones destacadas:",
+                                            "- 📺 Partidos en tiempo real",
+                                            "- 📊 Análisis estadístico personalizado",                 
+                                            "Consultar terminos y condiciones [aquí](https://www.deep90.com/) en Deep90.com"
+                                        ]
+                                    },
+                                    {
+                                        "type": "CheckboxGroup",
                                         "name": "Selecciona_opcion_b9cdae",
                                         "label": "Selecciona opcion",
                                         "required": True,
                                         "data-source": [
                                             {
                                                 "id": "0_Resultados_en_vivo",
-                                                "title": "Resultados en vivo"
+                                                "title": "Acepto Terminos y condiciones"
                                             }
                                         ]
-                                    },
+                                    },                            
                                     {
                                         "type": "Footer",
                                         "label": "Continue",
@@ -623,7 +710,7 @@ class FootballDataFlow:
                             "__example__": [
                                 {
                                     "id": "fixture_1234",
-                                    "title": "Barcelona 2 - 1 Real Madrid",
+                                    "title": "Barcelona 2 - 1 Junior",
                                     "description": "12/04/2025 20:00 | Finalizado"
                                 },
                                 {
@@ -672,7 +759,6 @@ class FootballDataFlow:
                 {
                     "id": "FIXTURE_DETAIL",
                     "title": "Detalles del Partido",
-                    "terminal": True,
                     "data": {
                         "fixture_id": {
                             "type": "number",
@@ -713,11 +799,75 @@ class FootballDataFlow:
                             },
                             {
                                 "type": "Footer",
-                                "label": "Finalizar",
+                                "label": "Continuar",
                                 "on-click-action": {
                                     "name": "data_exchange",
-                                    "payload": {}
+                                    "payload": {
+                                        "fixture_id": "${data.fixture_id}"
+                                    }
                                 }
+                            }
+                        ]
+                    }
+                },
+                # Pantalla 4: Próximos pasos
+                {
+                    "id": "NEXT_STEP",
+                    "title": "¿Qué deseas hacer ahora?",
+                    "terminal": True,
+                    "data": {
+                        "fixture_id": {
+                            "type": "number",
+                            "__example__": 1234
+                        },
+                        "next_actions": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {"type": "string"},
+                                    "title": {"type": "string"}
+                                }
+                            },
+                            "__example__": [
+                                {"id": "action_finish", "title": "Finalizar consulta"},
+                                {"id": "action_predictions", "title": "Asistente para predicciones"},
+                                {"id": "action_live_odds", "title": "Asistente para Probabilidades"},
+                                {"id": "action_betting", "title": "Asistente para apuestas"}
+                            ]
+                        }
+                    },
+                    "layout": {
+                        "type": "SingleColumnLayout",
+                        "children": [
+                            {
+                                "type": "Form",
+                                "name": "next_step_form",
+                                "children": [
+                                    {
+                                        "type": "TextSubheading",
+                                        "text": "Selecciona tu próxima acción"
+                                    },
+                                    {
+                                        "type": "RadioButtonsGroup",
+                                        "label": "Acciones disponibles",
+                                        "name": "selected_action",
+                                        "data-source": "${data.next_actions}",
+                                        "required": True
+                                    },
+                                    {
+                                        "type": "Footer",
+                                        "label": "Continuar",
+                                        "on-click-action": {
+                                            "name": "complete",
+                                            "payload": {
+                                                "selected_action": "${form.selected_action}",
+                                                "fixture_id": "${data.fixture_id}",
+                                                "id_flujo": "1033636801988224"
+                                            }
+                                        }
+                                    }
+                                ]
                             }
                         ]
                     }
