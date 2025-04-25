@@ -406,3 +406,12 @@ DAILY_MESSAGES_LIMIT = env.int("DAILY_MESSAGES_LIMIT", default=5)
 URL_PLANS = env("URL_PLANS", default="https://www.deep90.com/#pricing")
 URL_SUPPORT = env("URL_SUPPORT", default="https://www.deep90.com")
 
+
+
+
+# LIVE DATA CONFIGURATION OVERRIDE
+# ------------------------------------------------------------------------------
+# Use production values in production environment
+LIVE_FIXTURES_INTERVAL = env.int("LIVE_FIXTURES_INTERVAL", default=60)  # 1 minute LIVE_FIXTURES_INTERVAL
+LIVE_ODDS_INTERVAL = env.int("LIVE_ODDS_INTERVAL", default=60)  # 1 minute LIVE_ODDS_INTERVAL
+MONITOR_INTERVAL = env.int("MONITOR_INTERVAL", default=30)  # 30 seconds MONITOR_INTERVAL  

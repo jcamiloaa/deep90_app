@@ -304,3 +304,279 @@ class StandingData(models.Model):
     
     def __str__(self):
         return f"{self.team_name} - {self.league_name} (Pos. {self.rank})"
+
+
+class LiveFixtureTask(models.Model):
+    """Modelo para representar tareas nativas del sistema para obtener partidos en vivo."""
+    STATUS_CHOICES = (
+        ('idle', _('Inactivo')),
+        ('running', _('En ejecución')),
+        ('failed', _('Fallido')),
+        ('paused', _('Pausado')),
+    )
+    
+    name = models.CharField(_("Nombre"), max_length=200)
+    description = models.TextField(_("Descripción"), blank=True)
+    status = models.CharField(_("Estado"), max_length=20, choices=STATUS_CHOICES, default='idle')
+    is_enabled = models.BooleanField(_("Habilitado"), default=True)
+    interval_seconds = models.PositiveIntegerField(
+        _("Intervalo de actualización (segundos)"), 
+        default=60,
+        help_text=_("Recomendado: 60 segundos para partidos en vivo")
+    )
+    last_run = models.DateTimeField(_("Última ejecución"), null=True, blank=True)
+    next_run = models.DateTimeField(_("Próxima ejecución"), null=True, blank=True)
+    created_at = models.DateTimeField(_("Fecha de creación"), auto_now_add=True)
+    created_by = models.ForeignKey(
+        User, 
+        on_delete=models.CASCADE,
+        related_name='live_fixture_tasks',
+        verbose_name=_("Creado por")
+    )
+    celery_task_id = models.CharField(_("ID tarea Celery"), max_length=100, blank=True, null=True)
+    last_error = models.TextField(_("Último error"), blank=True, null=True)
+    error_count = models.PositiveIntegerField(_("Contador de errores"), default=0)
+    
+    class Meta:
+        verbose_name = _("Tarea de partidos en vivo")
+        verbose_name_plural = _("Live_Tareas de partidos en vivo")
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.name} ({self.get_status_display()})"
+    
+    def reset_errors(self):
+        """Reinicia los contadores de error."""
+        self.error_count = 0
+        self.last_error = None
+        self.save(update_fields=['error_count', 'last_error'])
+        
+    def update_status(self, status, error=None):
+        """Actualiza el estado de la tarea y registra errores si los hay."""
+        self.status = status
+        if error:
+            self.last_error = str(error)
+            self.error_count += 1
+        self.save(update_fields=['status', 'last_error', 'error_count'])
+
+
+class LiveFixtureData(models.Model):
+    """Modelo para almacenar datos de partidos en vivo."""
+    task = models.ForeignKey(
+        LiveFixtureTask,
+        on_delete=models.CASCADE,
+        related_name='fixtures',
+        verbose_name=_("Tarea")
+    )
+    fixture_id = models.IntegerField(_("ID del partido"))
+    date = models.DateTimeField(_("Fecha del partido"))
+    timestamp = models.BigIntegerField(_("Timestamp"))
+    timezone = models.CharField(_("Zona horaria"), max_length=50)
+    status_long = models.CharField(_("Estado (texto)"), max_length=100)
+    status_short = models.CharField(_("Estado (abreviado)"), max_length=10)
+    elapsed = models.IntegerField(_("Minutos transcurridos"), null=True, blank=True)
+    elapsed_seconds = models.IntegerField(_("Segundos adicionales"), null=True, blank=True)
+    venue_name = models.CharField(_("Estadio"), max_length=255, null=True, blank=True)
+    venue_city = models.CharField(_("Ciudad"), max_length=255, null=True, blank=True)
+    referee = models.CharField(_("Árbitro"), max_length=255, null=True, blank=True)
+    
+    # Equipo local
+    home_team_id = models.IntegerField(_("ID equipo local"))
+    home_team_name = models.CharField(_("Equipo local"), max_length=255)
+    home_team_logo = models.URLField(_("Logo equipo local"), max_length=255, null=True, blank=True)
+    home_team_winner = models.BooleanField(_("Ganador local"), null=True, blank=True)
+    
+    # Equipo visitante
+    away_team_id = models.IntegerField(_("ID equipo visitante"))
+    away_team_name = models.CharField(_("Equipo visitante"), max_length=255)
+    away_team_logo = models.URLField(_("Logo equipo visitante"), max_length=255, null=True, blank=True)
+    away_team_winner = models.BooleanField(_("Ganador visitante"), null=True, blank=True)
+    
+    # Goles
+    home_goals = models.IntegerField(_("Goles local"), null=True, blank=True)
+    away_goals = models.IntegerField(_("Goles visitante"), null=True, blank=True)
+    
+    # Puntuación
+    home_halftime = models.IntegerField(_("Goles local medio tiempo"), null=True, blank=True)
+    away_halftime = models.IntegerField(_("Goles visitante medio tiempo"), null=True, blank=True)
+    home_fulltime = models.IntegerField(_("Goles local tiempo completo"), null=True, blank=True)
+    away_fulltime = models.IntegerField(_("Goles visitante tiempo completo"), null=True, blank=True)
+    home_extratime = models.IntegerField(_("Goles local tiempo extra"), null=True, blank=True)
+    away_extratime = models.IntegerField(_("Goles visitante tiempo extra"), null=True, blank=True)
+    home_penalty = models.IntegerField(_("Penaltis local"), null=True, blank=True)
+    away_penalty = models.IntegerField(_("Penaltis visitante"), null=True, blank=True)
+    
+    # Liga
+    league_id = models.IntegerField(_("ID liga"))
+    league_name = models.CharField(_("Liga"), max_length=255)
+    league_country = models.CharField(_("País"), max_length=100)
+    league_logo = models.URLField(_("Logo liga"), max_length=255, null=True, blank=True)
+    league_flag = models.URLField(_("Bandera país"), max_length=255, null=True, blank=True)
+    league_season = models.IntegerField(_("Temporada"))
+    league_round = models.CharField(_("Jornada"), max_length=100, blank=True)
+    
+    # Datos adicionales
+    raw_data = models.JSONField(_("Datos en bruto"), blank=True, null=True)
+    updated_at = models.DateTimeField(_("Última actualización"), auto_now=True)
+    
+    class Meta:
+        verbose_name = _("Partido en vivo")
+        verbose_name_plural = _("live_Partidos en vivo")
+        indexes = [
+            models.Index(fields=['fixture_id']),
+            models.Index(fields=['date']),
+            models.Index(fields=['status_short']),
+            models.Index(fields=['league_id']),
+        ]
+        unique_together = ('task', 'fixture_id')
+    
+    def __str__(self):
+        return f"{self.home_team_name} vs {self.away_team_name} ({self.elapsed}' - {self.status_long})"
+
+
+class LiveOddsTask(models.Model):
+    """Modelo para representar tareas nativas del sistema para obtener cuotas en vivo."""
+    STATUS_CHOICES = (
+        ('idle', _('Inactivo')),
+        ('running', _('En ejecución')),
+        ('failed', _('Fallido')),
+        ('paused', _('Pausado')),
+    )
+    
+    name = models.CharField(_("Nombre"), max_length=200)
+    description = models.TextField(_("Descripción"), blank=True)
+    status = models.CharField(_("Estado"), max_length=20, choices=STATUS_CHOICES, default='idle')
+    is_enabled = models.BooleanField(_("Habilitado"), default=True)
+    interval_seconds = models.PositiveIntegerField(
+        _("Intervalo de actualización (segundos)"), 
+        default=60,
+        help_text=_("Recomendado: 60 segundos para cuotas en vivo")
+    )
+    last_run = models.DateTimeField(_("Última ejecución"), null=True, blank=True)
+    next_run = models.DateTimeField(_("Próxima ejecución"), null=True, blank=True)
+    created_at = models.DateTimeField(_("Fecha de creación"), auto_now_add=True)
+    created_by = models.ForeignKey(
+        User, 
+        on_delete=models.CASCADE,
+        related_name='live_odds_tasks',
+        verbose_name=_("Creado por")
+    )
+    celery_task_id = models.CharField(_("ID tarea Celery"), max_length=100, blank=True, null=True)
+    last_error = models.TextField(_("Último error"), blank=True, null=True)
+    error_count = models.PositiveIntegerField(_("Contador de errores"), default=0)
+    
+    class Meta:
+        verbose_name = _("Tarea de cuotas en vivo")
+        verbose_name_plural = _("live_Tareas de cuotas en vivo")
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.name} ({self.get_status_display()})"
+    
+    def reset_errors(self):
+        """Reinicia los contadores de error."""
+        self.error_count = 0
+        self.last_error = None
+        self.save(update_fields=['error_count', 'last_error'])
+        
+    def update_status(self, status, error=None):
+        """Actualiza el estado de la tarea y registra errores si los hay."""
+        self.status = status
+        if error:
+            self.last_error = str(error)
+            self.error_count += 1
+        self.save(update_fields=['status', 'last_error', 'error_count'])
+
+
+class LiveOddsData(models.Model):
+    """Modelo para almacenar datos de cuotas en vivo."""
+    task = models.ForeignKey(
+        LiveOddsTask,
+        on_delete=models.CASCADE,
+        related_name='odds',
+        verbose_name=_("Tarea")
+    )
+    fixture_id = models.IntegerField(_("ID del partido"))
+    league_id = models.IntegerField(_("ID liga"))
+    league_season = models.IntegerField(_("Temporada"))
+    
+    # Equipos y marcador
+    home_team_id = models.IntegerField(_("ID equipo local"))
+    away_team_id = models.IntegerField(_("ID equipo visitante"))
+    home_goals = models.IntegerField(_("Goles local"), null=True, blank=True)
+    away_goals = models.IntegerField(_("Goles visitante"), null=True, blank=True)
+    
+    # Estado del partido
+    status_elapsed = models.IntegerField(_("Minutos transcurridos"), null=True, blank=True)
+    status_elapsed_seconds = models.IntegerField(_("Segundos adicionales"), null=True, blank=True)
+    status_long = models.CharField(_("Estado (texto)"), max_length=100)
+    
+    # Estado de las apuestas
+    is_stopped = models.BooleanField(_("Detenido"), default=False)
+    is_blocked = models.BooleanField(_("Bloqueado"), default=False)
+    is_finished = models.BooleanField(_("Finalizado"), default=False)
+    
+    # Datos y actualizaciones
+    update_time = models.CharField(_("Hora actualización"), max_length=50)
+    raw_odds_data = models.JSONField(_("Datos en bruto de cuotas"), blank=True, null=True)
+    updated_at = models.DateTimeField(_("Última actualización"), auto_now=True)
+    
+    class Meta:
+        verbose_name = _("Cuota en vivo")
+        verbose_name_plural = _("live_Cuotas en vivo")
+        indexes = [
+            models.Index(fields=['fixture_id']),
+            models.Index(fields=['league_id']),
+        ]
+        unique_together = ('task', 'fixture_id')
+    
+    def __str__(self):
+        return f"Cuotas partido ID: {self.fixture_id} ({self.status_elapsed}')"
+
+
+class LiveOddsCategory(models.Model):
+    """Modelo para almacenar las categorías de cuotas de apuesta en vivo."""
+    odds_data = models.ForeignKey(
+        LiveOddsData,
+        on_delete=models.CASCADE,
+        related_name='odds_categories',
+        verbose_name=_("live_Datos de cuotas")
+    )
+    category_id = models.IntegerField(_("ID de categoría"))
+    name = models.CharField(_("Nombre"), max_length=255)
+    updated_at = models.DateTimeField(_("Última actualización"), auto_now=True)
+    
+    class Meta:
+        verbose_name = _("Categoría de cuotas")
+        verbose_name_plural = _("live_Categorías de cuotas")
+        indexes = [
+            models.Index(fields=['category_id']),
+        ]
+        unique_together = ('odds_data', 'category_id')
+    
+    def __str__(self):
+        return f"{self.name} - Partido: {self.odds_data.fixture_id}"
+
+
+class LiveOddsValue(models.Model):
+    """Modelo para almacenar los valores de cuotas específicos para cada categoría."""
+    category = models.ForeignKey(
+        LiveOddsCategory,
+        on_delete=models.CASCADE,
+        related_name='values',
+        verbose_name=_("Categoría")
+    )
+    value = models.CharField(_("Valor"), max_length=255)
+    odd = models.CharField(_("Cuota"), max_length=50)
+    handicap = models.CharField(_("Handicap"), max_length=50, null=True, blank=True)
+    main = models.BooleanField(_("Principal"), null=True, blank=True)
+    suspended = models.BooleanField(_("Suspendido"), default=False)
+    updated_at = models.DateTimeField(_("Última actualización"), auto_now=True)
+    
+    class Meta:
+        verbose_name = _("Valor de cuota")
+        verbose_name_plural = _("live_Valores de cuotas")
+        unique_together = ('category', 'value', 'handicap')
+    
+    def __str__(self):
+        return f"{self.category.name}: {self.value} ({self.odd})"

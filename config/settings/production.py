@@ -198,5 +198,8 @@ sentry_sdk.init(
 SPECTACULAR_SETTINGS["SERVERS"] = [
     {"url": "https://app.deep90.com", "description": "Production server"},
 ]
+
+
+
 # Your stuff...
 # ------------------------------------------------------------------------------

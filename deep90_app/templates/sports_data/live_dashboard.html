@@ -1,0 +1,971 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Live Football Dashboard" %}{% endblock %}
+
+{% block extra_css %}
+<style>
+    body {
+        background: linear-gradient(135deg, #f8fafc 0%, #e3e9f7 100%);
+    }
+    .dashboard-hero {
+        background: linear-gradient(90deg, #007bff 0%, #00c6ff 100%);
+        color: #fff;
+        border-radius: 1.5rem;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.08);
+        padding: 2.5rem 2rem 2rem 2rem;
+        margin-bottom: 2.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+    }
+    .dashboard-hero h1 {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+    }
+    .dashboard-hero .refresh-timer {
+        font-size: 1.1rem;
+        color: #e0eaff;
+        margin-right: 1rem;
+    }
+    .dashboard-hero .btn {
+        box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+        font-weight: 500;
+    }
+    .system-actions {
+        background: #fff;
+        border-radius: 1rem;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+        padding: 1.5rem 2rem;
+        margin-bottom: 2rem;
+        border: none;
+    }
+    .system-actions h5 {
+        font-weight: 600;
+        color: #007bff;
+    }
+    .card {
+        border-radius: 1rem;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+        border: none;
+    }
+    .card-header {
+        border-radius: 1rem 1rem 0 0;
+        font-weight: 600;
+        font-size: 1.1rem;
+        background: linear-gradient(90deg, #007bff 0%, #00c6ff 100%);
+        color: #fff !important;
+        border: none;
+    }
+    .table {
+        background: transparent;
+    }
+    .table th, .table td {
+        vertical-align: middle;
+    }
+    .badge {
+        font-size: 0.95em;
+        border-radius: 0.5rem;
+        padding: 0.45em 0.9em;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    }
+    .badge-live {
+        background: linear-gradient(90deg, #28a745 0%, #00c853 100%);
+        color: #fff;
+        animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(40,167,69,0.4); }
+        70% { box-shadow: 0 0 0 10px rgba(40,167,69,0); }
+        100% { box-shadow: 0 0 0 0 rgba(40,167,69,0.4); }
+    }
+    .stalled-task {
+        background: linear-gradient(90deg, #fff7e6 0%, #ffe0b2 100%);
+        border-left: 4px solid #fd7e14;
+    }
+    .stalled-time {
+        color: #fd7e14;
+        font-weight: bold;
+    }
+    .warning-indicator {
+        color: #fd7e14;
+        animation: pulse-warning 2s infinite;
+    }
+    @keyframes pulse-warning {
+        0% { opacity: 1; }
+        50% { opacity: 0.5; }
+        100% { opacity: 1; }
+    }
+    .odds-btn a {
+        width: 100%;
+        margin-top: 10px;
+        text-align: center;
+        font-weight: 500;
+        border-radius: 0.5rem;
+        transition: background 0.2s;
+    }
+    .odds-btn a:hover {
+        background: linear-gradient(90deg, #007bff 0%, #00c6ff 100%);
+        color: #fff;
+    }
+    .league-header {
+        display: flex;
+        align-items: center;
+        font-size: 1.2rem;
+        font-weight: 600;
+        background: #f4f8fb;
+        border-radius: 0.75rem;
+        padding: 0.5rem 1rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+    }
+    .fixture-card .card {
+        min-height: 320px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        border-radius: 1rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .fixture-card .card:hover {
+        transform: translateY(-4px) scale(1.03);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.10);
+    }
+    .match-card .card-header {
+        background: linear-gradient(90deg, #e3e9f7 0%, #f8fafc 100%);
+        color: #333;
+        border-radius: 1rem 1rem 0 0;
+        font-size: 1rem;
+        font-weight: 500;
+    }
+    .match-score {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #007bff;
+    }
+    .team img {
+        border-radius: 50%;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+        margin-right: 0.5rem;
+    }
+    .odds-container {
+        background: #f4f8fb;
+        border-radius: 0.5rem;
+        padding: 0.5rem 0.5rem 0.2rem 0.5rem;
+        margin-top: 0.5rem;
+    }
+    .odds-label {
+        font-size: 0.9em;
+        color: #007bff;
+        font-weight: 500;
+    }
+    .odds-value {
+        font-size: 1.1em;
+        color: #222;
+        font-weight: 600;
+        background: #e3e9f7;
+        border-radius: 0.4rem;
+        padding: 0.2em 0.7em;
+        margin-top: 0.2em;
+        display: inline-block;
+    }
+    /* Responsive improvements */
+    @media (max-width: 991px) {
+        .fixture-card .card { min-height: 280px; }
+    }
+    @media (max-width: 767px) {
+        .dashboard-hero { flex-direction: column; text-align: center; }
+        .dashboard-hero h1 { font-size: 2rem; }
+        .system-actions { padding: 1rem; }
+        .league-header { font-size: 1rem; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-hero mb-4">
+    <div>
+        <h1>{% trans "Panel de Datos en Vivo" %}</h1>
+        <div class="refresh-timer" id="refresh-countdown">Actualizando en: 30s</div>
+    </div>
+    <div>
+        <button class="btn btn-light btn-lg shadow-sm" id="refresh-now">
+            <i class="fa fa-sync-alt"></i> {% trans "Actualizar ahora" %}
+        </button>
+    </div>
+</div>
+
+<div class="system-actions mb-4">
+    <div class="d-flex justify-content-between align-items-center flex-wrap">
+        <h5 class="mb-0">{% trans "Acciones del Sistema" %}</h5>
+        <div class="d-flex flex-wrap gap-2">
+            <button class="btn btn-warning btn-lg" id="check-stalled-tasks">
+                <i class="fa fa-clock me-2"></i> {% trans "Verificar tareas desincronizadas" %}
+            </button>
+            <button class="btn btn-primary btn-lg" id="run-update-live-fixtures">
+                <i class="fa fa-futbol me-2"></i> {% trans "Actualizar Partidos en Vivo" %}
+            </button>
+            <button class="btn btn-info btn-lg" id="run-update-live-odds">
+                <i class="fa fa-coins me-2"></i> {% trans "Actualizar Cuotas en Vivo" %}
+            </button>
+        </div>
+    </div>
+    <div id="stalled-tasks-result" class="mt-3" style="display: none;"></div>
+    <div id="manual-tasks-result" class="mt-3" style="display: none;"></div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <span>{% trans "Tareas de Partidos en Vivo" %}</span>
+                    <a href="{% url 'admin:sports_data_livefixturedata_changelist' %}" class="btn btn-sm btn-light shadow-sm">
+                        {% trans "Ver en Admin" %}
+                    </a>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    {% if fixture_tasks %}
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>{% trans "Nombre" %}</th>
+                                    <th>{% trans "Estado" %}</th>
+                                    <th>{% trans "Último" %}</th>
+                                    <th>{% trans "Siguiente" %}</th>
+                                    <th>{% trans "Acciones" %}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for task in fixture_tasks %}
+                                <tr {% if task.is_enabled and task.next_run and task.next_run < now and task.status != 'running' %}class="stalled-task"{% endif %}>
+                                    <td>{{ task.name }}</td>
+                                    <td>
+                                        {% if task.status == 'running' %}
+                                        <span class="badge bg-success">{% trans "En ejecución" %}</span>
+                                        {% elif task.status == 'idle' %}
+                                        <span class="badge bg-info">{% trans "Inactivo" %}</span>
+                                        {% elif task.status == 'failed' %}
+                                        <span class="badge bg-danger">{% trans "Fallido" %}</span>
+                                        {% elif task.status == 'paused' %}
+                                        <span class="badge bg-warning">{% trans "Pausado" %}</span>
+                                        {% endif %}
+                                        
+                                        {% if task.is_enabled %}
+                                        <span class="badge bg-success">{% trans "Habilitado" %}</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">{% trans "Deshabilitado" %}</span>
+                                        {% endif %}
+                                        
+                                        {% if task.is_enabled and task.next_run and task.next_run < now and task.status != 'running' %}
+                                        <span class="badge bg-warning warning-indicator">{% trans "Desincronizada" %}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ task.last_run|date:"d/m/Y H:i:s"|default:"-" }}</td>
+                                    <td>
+                                        {% if task.next_run %}
+                                            {% if task.next_run < now and task.status != 'running' and task.is_enabled %}
+                                                <span class="stalled-time">{{ task.next_run|date:"d/m/Y H:i:s" }}</span>
+                                            {% else %}
+                                                {{ task.next_run|date:"d/m/Y H:i:s" }}
+                                            {% endif %}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td class="task-controls">
+                                        <div class="btn-group">
+                                            {% if task.is_enabled %}
+                                            <button class="btn btn-sm btn-warning toggle-task" data-task-id="{{ task.id }}" data-task-type="fixture">
+                                                {% trans "Deshabilitar" %}
+                                            </button>
+                                            {% else %}
+                                            <button class="btn btn-sm btn-success toggle-task" data-task-id="{{ task.id }}" data-task-type="fixture">
+                                                {% trans "Habilitar" %}
+                                            </button>
+                                            {% endif %}
+                                            
+                                            {% if task.status == 'failed' %}
+                                            <button class="btn btn-sm btn-danger restart-task" data-task-id="{{ task.id }}" data-task-type="fixture">
+                                                {% trans "Reiniciar" %}
+                                            </button>
+                                            {% endif %}
+                                            
+                                            {% if task.is_enabled and task.next_run and task.next_run < now and task.status != 'running' %}
+                                            <button class="btn btn-sm btn-outline-warning reset-stalled-task" data-task-id="{{ task.id }}" data-task-type="fixture">
+                                                <i class="fa fa-clock me-1"></i> {% trans "Corregir" %}
+                                            </button>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    {% else %}
+                        <div class="alert alert-info">
+                            {% trans "No hay tareas de partidos en vivo configuradas." %}
+                            <a href="{% url 'admin:sports_data_livefixturedata_add' %}" class="alert-link">{% trans "Crear una" %}</a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <span>{% trans "Tareas de Cuotas en Vivo" %}</span>
+                    <a href="{% url 'admin:sports_data_liveoddsdata_changelist' %}" class="btn btn-sm btn-light shadow-sm">
+                        {% trans "Ver en Admin" %}
+                    </a>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    {% if odds_tasks %}
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>{% trans "Nombre" %}</th>
+                                    <th>{% trans "Estado" %}</th>
+                                    <th>{% trans "Último" %}</th>
+                                    <th>{% trans "Siguiente" %}</th>
+                                    <th>{% trans "Acciones" %}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for task in odds_tasks %}
+                                <tr {% if task.is_enabled and task.next_run and task.next_run < now and task.status != 'running' %}class="stalled-task"{% endif %}>
+                                    <td>{{ task.name }}</td>
+                                    <td>
+                                        {% if task.status == 'running' %}
+                                        <span class="badge bg-success">{% trans "En ejecución" %}</span>
+                                        {% elif task.status == 'idle' %}
+                                        <span class="badge bg-info">{% trans "Inactivo" %}</span>
+                                        {% elif task.status == 'failed' %}
+                                        <span class="badge bg-danger">{% trans "Fallido" %}</span>
+                                        {% elif task.status == 'paused' %}
+                                        <span class="badge bg-warning">{% trans "Pausado" %}</span>
+                                        {% endif %}
+                                        
+                                        {% if task.is_enabled %}
+                                        <span class="badge bg-success">{% trans "Habilitado" %}</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">{% trans "Deshabilitado" %}</span>
+                                        {% endif %}
+                                        
+                                        {% if task.is_enabled and task.next_run and task.next_run < now and task.status != 'running' %}
+                                        <span class="badge bg-warning warning-indicator">{% trans "Desincronizada" %}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ task.last_run|date:"d/m/Y H:i:s"|default:"-" }}</td>
+                                    <td>
+                                        {% if task.next_run %}
+                                            {% if task.next_run < now and task.status != 'running' and task.is_enabled %}
+                                                <span class="stalled-time">{{ task.next_run|date:"d/m/Y H:i:s" }}</span>
+                                            {% else %}
+                                                {{ task.next_run|date:"d/m/Y H:i:s" }}
+                                            {% endif %}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td class="task-controls">
+                                        <div class="btn-group">
+                                            {% if task.is_enabled %}
+                                            <button class="btn btn-sm btn-warning toggle-task" data-task-id="{{ task.id }}" data-task-type="odds">
+                                                {% trans "Deshabilitar" %}
+                                            </button>
+                                            {% else %}
+                                            <button class="btn btn-sm btn-success toggle-task" data-task-id="{{ task.id }}" data-task-type="odds">
+                                                {% trans "Habilitar" %}
+                                            </button>
+                                            {% endif %}
+                                            
+                                            {% if task.status == 'failed' %}
+                                            <button class="btn btn-sm btn-danger restart-task" data-task-id="{{ task.id }}" data-task-type="odds">
+                                                {% trans "Reiniciar" %}
+                                            </button>
+                                            {% endif %}
+                                            
+                                            {% if task.is_enabled and task.next_run and task.next_run < now and task.status != 'running' %}
+                                            <button class="btn btn-sm btn-outline-warning reset-stalled-task" data-task-id="{{ task.id }}" data-task-type="odds">
+                                                <i class="fa fa-clock me-1"></i> {% trans "Corregir" %}
+                                            </button>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    {% else %}
+                        <div class="alert alert-info">
+                            {% trans "No hay tareas de cuotas en vivo configuradas." %}
+                            <a href="{% url 'admin:sports_data_liveoddsdata_add' %}" class="alert-link">{% trans "Crear una" %}</a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header bg-gradient-primary text-white d-flex justify-content-between align-items-center" style="background: linear-gradient(90deg, #28a745 0%, #00c853 100%);">
+        <h5 class="mb-0">
+            {% trans "Partidos en Vivo" %}
+            {% if live_fixtures %}
+            <span class="badge badge-live ms-2">{{ live_fixtures|length }} EN VIVO</span>
+            {% endif %}
+        </h5>
+        <div class="filter-container">
+            <label for="league-filter" class="me-2 text-white"><i class="fa fa-filter me-1"></i>{% trans "Filtrar por liga:" %}</label>
+            <select id="league-filter" class="form-select form-select-sm d-inline-block" style="width: auto; min-width: 200px;">
+                <option value="">{% trans "Todas las ligas" %}</option>
+                {% for league in leagues %}
+                    <option value="{{ league.id }}">{{ league.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+    <div class="card-body">
+        <div id="fixtures-container">
+            {% regroup live_fixtures by league_name as league_list %}
+            
+            {% for league in league_list %}
+            <div class="league-group mb-4" id="league-{{ league.grouper|slugify }}">
+                <h4 class="league-header mb-3">
+                    <img src="{{ league.list.0.league_logo }}" alt="{{ league.grouper }}" height="24" class="me-2">
+                    {{ league.grouper }}
+                    <span class="badge bg-secondary ms-2">{{ league.list|length }}</span>
+                </h4>
+                <div class="row">
+                {% for fixture in league.list %}
+                <div class="col-md-4 col-lg-3 mb-3 fixture-card" data-league-id="{{ fixture.league_id }}">
+                    <div class="card match-card {% if fixture.status_short == '1H' or fixture.status_short == '2H' %}live{% elif fixture.status_short == 'HT' %}half-time{% elif fixture.status_short == 'FT' or fixture.status_short == 'AET' or fixture.status_short == 'PEN' %}finished{% else %}not-started{% endif %}">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span>
+                                <img src="{{ fixture.league_logo }}" alt="{{ fixture.league_name }}" height="20" class="me-2">
+                                {{ fixture.league_name }}
+                            </span>
+                            {% if fixture.status_short == '1H' or fixture.status_short == '2H' %}
+                                <span class="badge bg-success badge-live">{{ fixture.elapsed }}'</span>
+                            {% elif fixture.status_short == 'HT' %}
+                                <span class="badge bg-warning">DESCANSO</span>
+                            {% elif fixture.status_short == 'FT' %}
+                                <span class="badge bg-info">FINAL</span>
+                            {% else %}
+                                <span class="badge bg-secondary">{{ fixture.status_long }}</span>
+                            {% endif %}
+                        </div>
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <div class="team">
+                                    <img src="{{ fixture.home_team_logo }}" alt="{{ fixture.home_team_name }}" height="30" class="me-2">
+                                    <span>{{ fixture.home_team_name }}</span>
+                                </div>
+                                <div class="score match-score">
+                                    {{ fixture.home_goals|default:"0" }}
+                                </div>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div class="team">
+                                    <img src="{{ fixture.away_team_logo }}" alt="{{ fixture.away_team_name }}" height="30" class="me-2">
+                                    <span>{{ fixture.away_team_name }}</span>
+                                </div>
+                                <div class="score match-score">
+                                    {{ fixture.away_goals|default:"0" }}
+                                </div>
+                            </div>
+                            
+                            {% if fixture.odds %}
+                            <div class="odds-container mt-3 pt-2 border-top">
+                                <div class="row text-center">
+                                    <div class="col-4">
+                                        <div class="odds-label">Local</div>
+                                        <div class="odds-value">{{ fixture.odds.home|floatformat:2 }}</div>
+                                    </div>
+                                    <div class="col-4">
+                                        <div class="odds-label">Empate</div>
+                                        <div class="odds-value">{{ fixture.odds.draw|floatformat:2 }}</div>
+                                    </div>
+                                    <div class="col-4">
+                                        <div class="odds-label">Visita</div>
+                                        <div class="odds-value">{{ fixture.odds.away|floatformat:2 }}</div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+                            
+                            <div class="odds-btn">
+                                <a href="{% url 'sports_data:fixture-odds-detail' fixture_id=fixture.fixture_id %}" class="btn btn-sm btn-outline-primary">
+                                    <i class="fa fa-chart-line me-1"></i> {% trans "Ver todas las cuotas" %}
+                                </a>
+                                <a href="{% url 'sports_data:fixture-widget' fixture_id=fixture.fixture_id %}" class="btn btn-sm btn-outline-info mt-2">
+                                    <i class="fa fa-info-circle me-1"></i> {% trans "Ver detalle del partido" %}
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-header">{% trans "Partidos por Estado" %}</div>
+            <div class="card-body">
+                <canvas id="fixture-status-chart" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-header">{% trans "Partidos por Liga" %}</div>
+            <div class="card-body">
+                <canvas id="league-chart" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-header">{% trans "Estado de las Cuotas" %}</div>
+            <div class="card-body">
+                <canvas id="odds-chart" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+<!-- Modal para detalles del partido -->
+<div class="modal fade" id="fixtureDetailsModal" tabindex="-1" aria-labelledby="fixtureDetailsModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="fixtureDetailsModalLabel">{% trans "Detalles del Partido" %}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div id="widget-container"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Variables para las gráficas
+    let fixtureStatusChart = null;
+    let leagueChart = null;
+    let oddsChart = null;
+    
+    // Datos para las gráficas (serán reemplazados por datos reales en la vista)
+    const fixtureStatusData = {
+        labels: [{% for label, count in fixture_status_data %}"{{ label }}", {% endfor %}],
+        data: [{% for label, count in fixture_status_data %}{{ count }}, {% endfor %}],
+    };
+    
+    const leagueData = {
+        labels: [{% for league in league_data %}"{{ league.name }}", {% endfor %}],
+        data: [{% for league in league_data %}{{ league.count }}, {% endfor %}],
+    };
+    
+    const oddsData = {
+        labels: ["Activas", "Bloqueadas", "Detenidas", "Finalizadas"],
+        data: [{{ odds_active }}, {{ odds_blocked }}, {{ odds_stopped }}, {{ odds_finished }}],
+    };
+    
+    // Cuando el documento esté listo
+    document.addEventListener('DOMContentLoaded', function() {
+        // Inicializar las gráficas
+        initCharts();
+        
+        // Configurar cuenta regresiva para refresco
+        initRefreshCountdown();
+        
+        // Configurar eventos de los botones
+        setupButtonHandlers();
+        
+        // Configurar filtro de liga
+        setupLeagueFilter();
+
+        // Botón para ejecutar manualmente update_live_fixtures
+        document.getElementById('run-update-live-fixtures').addEventListener('click', function() {
+            const btn = this;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa fa-spinner fa-spin me-2"></i> Actualizando...';
+            fetch('/sports-data/api/run-update-live-fixtures/', {method: 'POST', headers: {'X-CSRFToken': getCsrfToken()}})
+                .then(r => r.json())
+                .then(data => {
+                    showManualTaskResult(data);
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fa fa-futbol me-2"></i> Actualizar Partidos en Vivo';
+                })
+                .catch(() => {
+                    showManualTaskResult({success: false, message: 'Error al ejecutar la tarea.'});
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fa fa-futbol me-2"></i> Actualizar Partidos en Vivo';
+                });
+        });
+
+        // Botón para ejecutar manualmente update_live_odds
+        document.getElementById('run-update-live-odds').addEventListener('click', function() {
+            const btn = this;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa fa-spinner fa-spin me-2"></i> Actualizando...';
+            fetch('/sports-data/api/run-update-live-odds/', {method: 'POST', headers: {'X-CSRFToken': getCsrfToken()}})
+                .then(r => r.json())
+                .then(data => {
+                    showManualTaskResult(data);
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fa fa-coins me-2"></i> Actualizar Cuotas en Vivo';
+                })
+                .catch(() => {
+                    showManualTaskResult({success: false, message: 'Error al ejecutar la tarea.'});
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fa fa-coins me-2"></i> Actualizar Cuotas en Vivo';
+                });
+        });
+
+        function showManualTaskResult(data) {
+            const el = document.getElementById('manual-tasks-result');
+            el.style.display = 'block';
+            if (data.success) {
+                el.innerHTML = `<div class='alert alert-success'><strong>✔</strong> ${data.message || 'Tarea ejecutada correctamente.'}</div>`;
+            } else {
+                el.innerHTML = `<div class='alert alert-danger'><strong>✖</strong> ${data.message || 'Error al ejecutar la tarea.'}</div>`;
+            }
+        }
+    });
+    
+    // Inicializar las gráficas
+    function initCharts() {
+        // Gráfico de estado de partidos
+        const fixtureCtx = document.getElementById('fixture-status-chart').getContext('2d');
+        fixtureStatusChart = new Chart(fixtureCtx, {
+            type: 'doughnut',
+            data: {
+                labels: fixtureStatusData.labels,
+                datasets: [{
+                    data: fixtureStatusData.data,
+                    backgroundColor: ['#28a745', '#ffc107', '#17a2b8', '#6c757d', '#dc3545'],
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                    }
+                }
+            }
+        });
+        
+        // Gráfico de partidos por liga
+        const leagueCtx = document.getElementById('league-chart').getContext('2d');
+        leagueChart = new Chart(leagueCtx, {
+            type: 'bar',
+            data: {
+                labels: leagueData.labels,
+                datasets: [{
+                    label: 'Partidos',
+                    data: leagueData.data,
+                    backgroundColor: '#007bff',
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            precision: 0
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Gráfico de estado de cuotas
+        const oddsCtx = document.getElementById('odds-chart').getContext('2d');
+        oddsChart = new Chart(oddsCtx, {
+            type: 'pie',
+            data: {
+                labels: oddsData.labels,
+                datasets: [{
+                    data: oddsData.data,
+                    backgroundColor: ['#28a745', '#dc3545', '#ffc107', '#17a2b8'],
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                    }
+                }
+            }
+        });
+    }
+    
+    // Configurar cuenta regresiva para refresco automático
+    function initRefreshCountdown() {
+        const countdownEl = document.getElementById('refresh-countdown');
+        let seconds = 30; // tiempo de refresco en segundos
+        
+        function updateCountdown() {
+            countdownEl.textContent = `Actualizando en: ${seconds}s`;
+            seconds--;
+            
+            if (seconds < 0) {
+                // Refrescar la página
+                window.location.reload();
+            }
+        }
+        
+        // Actualizar cada segundo
+        setInterval(updateCountdown, 1000);
+        
+        // Botón de refresco manual
+        document.getElementById('refresh-now').addEventListener('click', function() {
+            window.location.reload();
+        });
+    }
+    
+    // Configurar eventos para los botones
+    function setupButtonHandlers() {
+        // Botones de toggle para tareas
+        document.querySelectorAll('.toggle-task').forEach(button => {
+            button.addEventListener('click', function() {
+                const taskId = this.dataset.taskId;
+                const taskType = this.dataset.taskType;
+                toggleTask(taskId, taskType, this);
+            });
+        });
+        
+        // Botones de reinicio para tareas
+        document.querySelectorAll('.restart-task').forEach(button => {
+            button.addEventListener('click', function() {
+                const taskId = this.dataset.taskId;
+                const taskType = this.dataset.taskType;
+                restartTask(taskId, taskType, this);
+            });
+        });
+        
+        // Botones para corregir tareas desincronizadas
+        document.querySelectorAll('.reset-stalled-task').forEach(button => {
+            button.addEventListener('click', function() {
+                const taskId = this.dataset.taskId;
+                const taskType = this.dataset.taskType;
+                resetStalledTask(taskId, taskType, this);
+            });
+        });
+        
+        // Botón para verificar todas las tareas desincronizadas
+        document.getElementById('check-stalled-tasks').addEventListener('click', function() {
+            checkAllStalledTasks(this);
+        });
+    }
+    
+    // Función para activar/desactivar una tarea
+    function toggleTask(taskId, taskType, button) {
+        button.disabled = true;
+        button.innerHTML = 'Procesando...';
+        
+        // Realizar la petición AJAX para toggle
+        fetch(`/sports-data/api/toggle-live-task/${taskType}/${taskId}/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCsrfToken(),
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Refrescar la página para mostrar el nuevo estado
+                window.location.reload();
+            } else {
+                alert('Error: ' + data.message);
+                button.disabled = false;
+                button.innerHTML = button.textContent.includes('Habilitar') ? 'Habilitar' : 'Deshabilitar';
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error al procesar la solicitud.');
+            button.disabled = false;
+            button.innerHTML = button.textContent.includes('Habilitar') ? 'Habilitar' : 'Deshabilitar';
+        });
+    }
+    
+    // Función para reiniciar una tarea fallida
+    function restartTask(taskId, taskType, button) {
+        button.disabled = true;
+        button.innerHTML = 'Procesando...';
+        
+        // Realizar la petición AJAX para restart
+        fetch(`/sports-data/api/restart-live-task/${taskType}/${taskId}/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCsrfToken(),
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Refrescar la página para mostrar el nuevo estado
+                window.location.reload();
+            } else {
+                alert('Error: ' + data.message);
+                button.disabled = false;
+                button.innerHTML = 'Reiniciar';
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error al procesar la solicitud.');
+            button.disabled = false;
+            button.innerHTML = 'Reiniciar';
+        });
+    }
+    
+    // Función para reiniciar una tarea desincronizada individual
+    function resetStalledTask(taskId, taskType, button) {
+        button.disabled = true;
+        button.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Procesando...';
+        
+        // Realizar la petición AJAX para reiniciar la tarea
+        fetch(`/sports-data/api/reset-stalled-tasks/${taskType}/${taskId}/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCsrfToken(),
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Refrescar la página para mostrar el nuevo estado
+                window.location.reload();
+            } else {
+                alert('Error: ' + data.message);
+                button.disabled = false;
+                button.innerHTML = '<i class="fa fa-clock me-1"></i> Corregir';
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error al procesar la solicitud.');
+            button.disabled = false;
+            button.innerHTML = '<i class="fa fa-clock me-1"></i> Corregir';
+        });
+    }
+    
+    // Función para verificar y corregir todas las tareas desincronizadas
+    function checkAllStalledTasks(button) {
+        button.disabled = true;
+        button.innerHTML = '<i class="fa fa-spinner fa-spin me-2"></i> Verificando...';
+        
+        // Mostrar el contenedor de resultados
+        const resultContainer = document.getElementById('stalled-tasks-result');
+        resultContainer.innerHTML = '<div class="alert alert-info">Verificando tareas desincronizadas...</div>';
+        resultContainer.style.display = 'block';
+        
+        // Realizar la petición AJAX para verificar todas las tareas
+        fetch(`/sports-data/api/reset-all-stalled-tasks/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCsrfToken(),
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                if (data.tasks_reset > 0) {
+                    resultContainer.innerHTML = `
+                        <div class="alert alert-success">
+                            <strong>¡Éxito!</strong> ${data.message}
+                            <button class="btn btn-sm btn-outline-success float-end" onclick="window.location.reload()">
+                                <i class="fa fa-sync-alt me-1"></i> Actualizar página
+                            </button>
+                        </div>`;
+                } else {
+                    resultContainer.innerHTML = `
+                        <div class="alert alert-info">
+                            <strong>Información:</strong> No se encontraron tareas desincronizadas.
+                        </div>`;
+                }
+            } else {
+                resultContainer.innerHTML = `
+                    <div class="alert alert-danger">
+                        <strong>Error:</strong> ${data.message}
+                    </div>`;
+            }
+            button.disabled = false;
+            button.innerHTML = '<i class="fa fa-clock me-2"></i> Verificar tareas desincronizadas';
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            resultContainer.innerHTML = `
+                <div class="alert alert-danger">
+                    <strong>Error:</strong> Error al procesar la solicitud.
+                </div>`;
+            button.disabled = false;
+            button.innerHTML = '<i class="fa fa-clock me-2"></i> Verificar tareas desincronizadas';
+        });
+    }
+    
+    // Configurar filtro de liga
+    function setupLeagueFilter() {
+        const leagueFilter = document.getElementById('league-filter');
+        if (!leagueFilter) return;
+        
+        leagueFilter.addEventListener('change', function() {
+            const selectedLeagueId = this.value;
+            const fixtureCards = document.querySelectorAll('.fixture-card');
+            
+            fixtureCards.forEach(card => {
+                // Convertir ambos valores a string para garantizar una comparación consistente
+                if (!selectedLeagueId || String(card.dataset.leagueId) === String(selectedLeagueId)) {
+                    card.style.display = 'block';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        });
+    }
+    
+    // Obtener token CSRF
+    function getCsrfToken() {
+        const cookieValue = document.cookie
+            .split('; ')
+            .find(row => row.startsWith('csrftoken='))
+            ?.split('=')[1];
+        return cookieValue;
+    }
+</script>
+{% endblock %}

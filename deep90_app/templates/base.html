@@ -90,6 +90,7 @@
   <body class="light-theme {% block bodyclass %}{% endblock bodyclass %}">
     {% block body %}
       {% if request.user.is_authenticated %}
+      
         <div class="dashboard-container">
           <!-- Sidebar -->
           <aside class="sidebar">
@@ -136,6 +137,12 @@
                   <a href="{% url 'sports_data:create-task-wizard' %}" class="sidebar-link">
                     <i class="sidebar-icon fas fa-plus-circle"></i>
                     <span class="sidebar-text">{% trans "Nueva Tarea" %}</span>
+                  </a>
+                </div>
+                <div class="sidebar-item">
+                  <a href="{% url 'sports_data:live-dashboard' %}" class="sidebar-link">
+                    <i class="sidebar-icon fas fa-satellite-dish"></i>
+                    <span class="sidebar-text">{% trans "Datos en Vivo" %}</span>
                   </a>
                 </div>
               {% endif %}
@@ -249,6 +256,28 @@
                       <i class="fas fa-sign-in-alt me-1"></i> {% translate "Iniciar Sesión" %}
                     </a>
                   </li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="{% url 'home' %}">Home <span class="sr-only">(current)</span></a>
+                  </li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="{% url 'about' %}">About</a>
+                  </li>
+                  {% if request.user.is_staff %}
+                  <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                      API Football
+                    </a>
+                    <div class="dropdown-menu" aria-labelledby="navbarDropdown">
+                      <a class="dropdown-item" href="{% url 'sports_data:dashboard' %}">{% trans "Dashboard" %}</a>
+                      <a class="dropdown-item" href="{% url 'sports_data:task-list' %}">{% trans "Tareas" %}</a>
+                      <a class="dropdown-item" href="{% url 'sports_data:create-task-wizard' %}">{% trans "Nueva Tarea" %}</a>
+                      <div class="dropdown-divider"></div>
+                      <a class="dropdown-item" href="{% url 'sports_data:live-dashboard' %}">
+                        <i class="fa fa-satellite-dish"></i> {% trans "Datos en Vivo" %}
+                      </a>
+                    </div>
+                  </li>
+                  {% endif %}
                 </ul>
               </div>
             </div>
@@ -288,5 +317,6 @@
       </script>
       {% endcomment %}
     {% endblock inline_javascript %}
+    {% block extra_js %}{% endblock %}
   </body>
 </html>

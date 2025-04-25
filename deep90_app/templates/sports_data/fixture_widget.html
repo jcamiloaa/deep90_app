@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Detalles del Partido" %}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div id="wg-api-football-game"
+        data-host="v3.football.api-sports.io"
+        data-key="{{ api_football_key }}"
+        data-id="{{ fixture_id }}"
+        data-theme=""
+        data-refresh="15"
+        data-show-errors="false"
+        data-show-logos="true">
+    </div>
+    <script type="module" src="https://widgets.api-sports.io/2.0.3/widgets.js"></script>
+</div>
+{% endblock %}

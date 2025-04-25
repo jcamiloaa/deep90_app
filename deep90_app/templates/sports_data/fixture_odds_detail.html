@@ -1,0 +1,472 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Detalle de Cuotas de Partido" %}{% endblock %}
+
+{% block extra_css %}
+<style>
+    body {
+        background: linear-gradient(135deg, #f8fafc 0%, #e3e9f7 100%);
+    }
+    .match-header {
+        background: linear-gradient(90deg, #007bff 0%, #00c6ff 100%);
+        color: #fff;
+        padding: 2rem 1.5rem 1.5rem 1.5rem;
+        border-radius: 1.5rem;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.08);
+        margin-bottom: 2.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+    }
+    .match-header .team-logo {
+        height: 60px;
+        width: 60px;
+        object-fit: contain;
+        border-radius: 50%;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+        margin: 0 0.5rem;
+    }
+    .match-header h4 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-bottom: 0;
+    }
+    .match-score {
+        font-size: 2.5rem;
+        font-weight: 800;
+        color: #fff;
+        letter-spacing: 0.05em;
+    }
+    .match-time {
+        font-size: 1.2rem;
+        font-weight: 600;
+        color: #e0eaff;
+        margin-top: 0.5rem;
+    }
+    .badge-live {
+        background: linear-gradient(90deg, #28a745 0%, #00c853 100%);
+        color: #fff;
+        animation: pulse 1.5s infinite;
+        font-size: 1.1em;
+        padding: 0.3em 1em;
+        border-radius: 0.7em;
+    }
+    @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(40,167,69,0.4); }
+        70% { box-shadow: 0 0 0 10px rgba(40,167,69,0); }
+        100% { box-shadow: 0 0 0 0 rgba(40,167,69,0.4); }
+    }
+    .match-info {
+        font-size: 1rem;
+        color: #e0eaff;
+        margin-top: 0.5rem;
+    }
+    .card.odds-main {
+        border-radius: 1.2rem;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+        border: none;
+        margin-bottom: 2rem;
+    }
+    .card-header {
+        background: linear-gradient(90deg, #007bff 0%, #00c6ff 100%);
+        color: #fff;
+        border-radius: 1.2rem 1.2rem 0 0;
+        font-weight: 600;
+        font-size: 1.1rem;
+        border: none;
+    }
+    .nav-tabs {
+        background: #f4f8fb;
+        border-radius: 1rem 1rem 0 0;
+        padding: 0.5rem 1rem 0 1rem;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+    .nav-tabs .nav-link {
+        border: none;
+        border-radius: 0.7em 0.7em 0 0;
+        background: none;
+        color: #007bff;
+        font-weight: 500;
+        font-size: 1.1em;
+        margin-right: 0.5em;
+        transition: background 0.2s, color 0.2s;
+    }
+    .nav-tabs .nav-link.active {
+        background: linear-gradient(90deg, #007bff 0%, #00c6ff 100%);
+        color: #fff;
+        font-weight: 700;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    }
+    .odds-card {
+        border-radius: 1rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+        border: none;
+        margin-bottom: 1.5rem;
+        transition: transform 0.15s, box-shadow 0.15s;
+        height: 100%;
+    }
+    .odds-card:hover {
+        transform: translateY(-4px) scale(1.03);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.10);
+    }
+    .odds-table td {
+        padding: 10px 8px;
+        vertical-align: middle;
+        font-size: 1.05em;
+    }
+    .odds-value {
+        background: #e3e9f7;
+        color: #007bff;
+        font-weight: 700;
+        border-radius: 0.5em;
+        padding: 0.3em 1em;
+        font-size: 1.1em;
+        display: inline-block;
+        min-width: 60px;
+        text-align: center;
+        transition: background 0.2s, color 0.2s;
+    }
+    .odds-value.odds-suspended {
+        background: #ffe0e0;
+        color: #e74c3c;
+        text-decoration: line-through;
+    }
+    .category-title {
+        font-size: 1.1em;
+        font-weight: 600;
+        color: #007bff;
+        margin-bottom: 0.7em;
+        border-bottom: 2px solid #e3e9f7;
+        padding-bottom: 0.3em;
+    }
+    .alert-info {
+        border-radius: 1rem;
+        background: #f4f8fb;
+        color: #007bff;
+        font-size: 1.1em;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+    @media (max-width: 991px) {
+        .match-header { flex-direction: column; text-align: center; }
+        .match-header .team-logo { margin: 0.5rem auto; }
+        .match-header h4 { font-size: 1.2rem; }
+        .match-score { font-size: 2rem; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="mb-3">
+        <a href="{% url 'sports_data:live-dashboard' %}" class="btn btn-outline-secondary btn-lg shadow-sm">
+            <i class="fa fa-arrow-left"></i> {% trans "Volver al Dashboard" %}
+        </a>
+    </div>
+    <div class="match-header mb-4">
+        <div class="row w-100 align-items-center">
+            <div class="col-md-4 text-center text-md-start mb-2 mb-md-0">
+                <div class="d-flex align-items-center justify-content-center justify-content-md-start">
+                    <img src="{{ fixture.home_team_logo }}" alt="{{ fixture.home_team_name }}" class="team-logo me-2">
+                    <h4 class="mb-0">{{ fixture.home_team_name }}</h4>
+                </div>
+            </div>
+            <div class="col-md-4 text-center mb-2 mb-md-0">
+                <div class="match-score">
+                    {{ fixture.home_goals|default:"0" }} - {{ fixture.away_goals|default:"0" }}
+                </div>
+                <div class="match-time mt-2">
+                    {% if fixture.status_short == "NS" %}
+                        {% trans "No iniciado" %}
+                    {% elif fixture.status_short == "FT" %}
+                        {% trans "Finalizado" %}
+                    {% elif fixture.status_short == "HT" %}
+                        {% trans "Descanso" %}
+                    {% else %}
+                        <span class="badge-live">{{ fixture.elapsed }}'</span>
+                    {% endif %}
+                </div>
+                <div class="match-info mt-2">
+                    {{ fixture.league_name }} - {{ fixture.league_country }}<br>
+                    {% if fixture.venue_name %}{{ fixture.venue_name }}{% endif %}{% if fixture.venue_city %}, {{ fixture.venue_city }}{% endif %}
+                </div>
+            </div>
+            <div class="col-md-4 text-center text-md-end">
+                <div class="d-flex align-items-center justify-content-center justify-content-md-end">
+                    <h4 class="mb-0">{{ fixture.away_team_name }}</h4>
+                    <img src="{{ fixture.away_team_logo }}" alt="{{ fixture.away_team_name }}" class="team-logo ms-2">
+                </div>
+            </div>
+        </div>
+    </div>
+    {% if has_odds %}
+        <div class="card odds-main mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">{% trans "Cuotas Disponibles" %}</h5>
+            </div>
+            <div class="card-body">
+                <ul class="nav nav-tabs" id="oddsTab" role="tablist">
+                    {% if categories.main %}
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="main-tab" data-bs-toggle="tab" data-bs-target="#main" type="button" role="tab" aria-controls="main" aria-selected="true">Principales</button>
+                    </li>
+                    {% endif %}
+                    
+                    {% if categories.goals %}
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link {% if not categories.main %}active{% endif %}" id="goals-tab" data-bs-toggle="tab" data-bs-target="#goals" type="button" role="tab" aria-controls="goals" aria-selected="{% if not categories.main %}true{% else %}false{% endif %}">Goles</button>
+                    </li>
+                    {% endif %}
+                    
+                    {% if categories.halftime %}
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="halftime-tab" data-bs-toggle="tab" data-bs-target="#halftime" type="button" role="tab" aria-controls="halftime" aria-selected="false">1er Tiempo</button>
+                    </li>
+                    {% endif %}
+                    
+                    {% if categories.corners %}
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="corners-tab" data-bs-toggle="tab" data-bs-target="#corners" type="button" role="tab" aria-controls="corners" aria-selected="false">Córners</button>
+                    </li>
+                    {% endif %}
+                    
+                    {% if categories.cards %}
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="cards-tab" data-bs-toggle="tab" data-bs-target="#cards" type="button" role="tab" aria-controls="cards" aria-selected="false">Tarjetas</button>
+                    </li>
+                    {% endif %}
+                    
+                    {% if categories.other %}
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="other-tab" data-bs-toggle="tab" data-bs-target="#other" type="button" role="tab" aria-controls="other" aria-selected="false">Otras</button>
+                    </li>
+                    {% endif %}
+                </ul>
+                <div class="tab-content mt-4" id="oddsTabContent">
+                    {% if categories.main %}
+                    <div class="tab-pane fade show active" id="main" role="tabpanel" aria-labelledby="main-tab">
+                        <div class="row">
+                            {% for category in categories.main %}
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="odds-card card">
+                                    <div class="card-header">
+                                        {{ category.name }}
+                                    </div>
+                                    <div class="card-body">
+                                        <table class="odds-table">
+                                            <tbody>
+                                                {% for value in category.values.all %}
+                                                <tr>
+                                                    <td>{{ value.value }}{% if value.handicap %} ({{ value.handicap }}){% endif %}</td>
+                                                    <td class="text-end">
+                                                        <span class="odds-value {% if value.suspended %}odds-suspended{% endif %}">
+                                                            {{ value.odd }}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if categories.goals %}
+                    <div class="tab-pane fade {% if not categories.main %}show active{% endif %}" id="goals" role="tabpanel" aria-labelledby="goals-tab">
+                        <div class="row">
+                            {% for category in categories.goals %}
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="odds-card card">
+                                    <div class="card-header">
+                                        {{ category.name }}
+                                    </div>
+                                    <div class="card-body">
+                                        <table class="odds-table">
+                                            <tbody>
+                                                {% for value in category.values.all %}
+                                                <tr>
+                                                    <td>{{ value.value }}{% if value.handicap %} ({{ value.handicap }}){% endif %}</td>
+                                                    <td class="text-end">
+                                                        <span class="odds-value {% if value.suspended %}odds-suspended{% endif %}">
+                                                            {{ value.odd }}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if categories.halftime %}
+                    <div class="tab-pane fade" id="halftime" role="tabpanel" aria-labelledby="halftime-tab">
+                        <div class="row">
+                            {% for category in categories.halftime %}
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="odds-card card">
+                                    <div class="card-header">
+                                        {{ category.name }}
+                                    </div>
+                                    <div class="card-body">
+                                        <table class="odds-table">
+                                            <tbody>
+                                                {% for value in category.values.all %}
+                                                <tr>
+                                                    <td>{{ value.value }}{% if value.handicap %} ({{ value.handicap }}){% endif %}</td>
+                                                    <td class="text-end">
+                                                        <span class="odds-value {% if value.suspended %}odds-suspended{% endif %}">
+                                                            {{ value.odd }}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if categories.corners %}
+                    <div class="tab-pane fade" id="corners" role="tabpanel" aria-labelledby="corners-tab">
+                        <div class="row">
+                            {% for category in categories.corners %}
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="odds-card card">
+                                    <div class="card-header">
+                                        {{ category.name }}
+                                    </div>
+                                    <div class="card-body">
+                                        <table class="odds-table">
+                                            <tbody>
+                                                {% for value in category.values.all %}
+                                                <tr>
+                                                    <td>{{ value.value }}{% if value.handicap %} ({{ value.handicap }}){% endif %}</td>
+                                                    <td class="text-end">
+                                                        <span class="odds-value {% if value.suspended %}odds-suspended{% endif %}">
+                                                            {{ value.odd }}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if categories.cards %}
+                    <div class="tab-pane fade" id="cards" role="tabpanel" aria-labelledby="cards-tab">
+                        <div class="row">
+                            {% for category in categories.cards %}
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="odds-card card">
+                                    <div class="card-header">
+                                        {{ category.name }}
+                                    </div>
+                                    <div class="card-body">
+                                        <table class="odds-table">
+                                            <tbody>
+                                                {% for value in category.values.all %}
+                                                <tr>
+                                                    <td>{{ value.value }}{% if value.handicap %} ({{ value.handicap }}){% endif %}</td>
+                                                    <td class="text-end">
+                                                        <span class="odds-value {% if value.suspended %}odds-suspended{% endif %}">
+                                                            {{ value.odd }}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if categories.other %}
+                    <div class="tab-pane fade" id="other" role="tabpanel" aria-labelledby="other-tab">
+                        <div class="row">
+                            {% for category in categories.other %}
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="odds-card card">
+                                    <div class="card-header">
+                                        {{ category.name }}
+                                    </div>
+                                    <div class="card-body">
+                                        <table class="odds-table">
+                                            <tbody>
+                                                {% for value in category.values.all %}
+                                                <tr>
+                                                    <td>{{ value.value }}{% if value.handicap %} ({{ value.handicap }}){% endif %}</td>
+                                                    <td class="text-end">
+                                                        <span class="odds-value {% if value.suspended %}odds-suspended{% endif %}">
+                                                            {{ value.odd }}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <div class="alert alert-info">
+            <h4 class="alert-heading">{% trans "No hay cuotas disponibles para este partido" %}</h4>
+            <p>{% trans "No se encontraron cuotas para este partido en nuestro sistema." %}</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Inicializar tooltips si es necesario
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl)
+        })
+        
+        // Si se proporciona un hash en la URL, activar la pestaña correspondiente
+        var hash = window.location.hash;
+        if (hash) {
+            var triggerEl = document.querySelector('button[data-bs-target="' + hash + '"]');
+            if (triggerEl) {
+                var tab = new bootstrap.Tab(triggerEl);
+                tab.show();
+            }
+        }
+    });
+</script>
+{% endblock %}

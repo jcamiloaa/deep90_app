@@ -8,11 +8,23 @@ from django.contrib import messages
 from django.http import JsonResponse, HttpResponseRedirect
 from django.utils import timezone
 from django.db import transaction
+from django.db.models import Count
 from django_celery_beat.models import PeriodicTask
+from django.views.decorators.csrf import csrf_exempt, csrf_protect
+from django.utils.decorators import method_decorator
+from django.views.decorators.http import require_POST, require_GET
+import json
+import os
+from django.conf import settings
 
-from .models import ScheduledTask, APIEndpoint, APIResult
+from .models import (
+    ScheduledTask, APIEndpoint, APIResult, 
+    LiveFixtureTask, LiveOddsTask, 
+    LiveFixtureData, LiveOddsData
+)
 from .forms import TaskScheduleForm, EndpointSelectionForm, ParametersForm
 from .tasks import execute_api_request
+from .live_tasks import toggle_task_status, restart_task, update_live_fixtures, update_live_odds
 
 
 class AdminRequiredMixin(UserPassesTestMixin):
@@ -400,3 +412,399 @@ class CancelTaskView(LoginRequiredMixin, AdminRequiredMixin, TemplateView):
         
         messages.success(request, f'Tarea "{task.name}" cancelada correctamente.')
         return redirect('sports_data:task-detail', pk=task.id)
+
+
+def live_dashboard(request):
+    """
+    Vista para el dashboard de seguimiento de datos en vivo de fútbol
+    """
+    # Obtener la hora actual para comparar con next_run
+    now = timezone.now()
+    
+    # Obtener tareas de partidos en vivo
+    fixture_tasks = LiveFixtureTask.objects.all().order_by('-is_enabled', 'name')
+    
+    # Obtener tareas de cuotas en vivo
+    odds_tasks = LiveOddsTask.objects.all().order_by('-is_enabled', 'name')
+    
+    # Obtener partidos en vivo actuales
+    live_fixtures = LiveFixtureData.objects.all().order_by(
+        'league_name', 'home_team_name'
+    ).select_related('task')
+    
+    # Obtener datos para las gráficas
+    fixture_status_data = get_fixture_status_chart_data()
+    league_data = get_league_chart_data()
+    odds_stats = get_odds_chart_data()
+    
+    # Obtener ligas únicas para el filtro
+    leagues = get_unique_leagues(live_fixtures)
+    
+    # Enriquecer datos de partidos con información de cuotas si está disponible
+    live_fixtures = enrich_fixtures_with_odds(live_fixtures)
+    
+    context = {
+        'now': now,  # Pasar la hora actual a la plantilla
+        'fixture_tasks': fixture_tasks,
+        'odds_tasks': odds_tasks,
+        'live_fixtures': live_fixtures,
+        'fixture_status_data': fixture_status_data,
+        'league_data': league_data,
+        'leagues': leagues,
+        'odds_active': odds_stats['active'],
+        'odds_blocked': odds_stats['blocked'],
+        'odds_stopped': odds_stats['stopped'],
+        'odds_finished': odds_stats['finished'],
+    }
+    
+    return render(request, 'sports_data/live_dashboard.html', context)
+
+
+def get_fixture_status_chart_data():
+    """
+    Obtiene datos formateados para el gráfico de estado de partidos
+    """
+    status_counts = LiveFixtureData.objects.values('status_short').annotate(count=Count('status_short'))
+    
+    # Mapeo de códigos a etiquetas más descriptivas
+    status_labels = {
+        '1H': 'Primera parte',
+        '2H': 'Segunda parte',
+        'HT': 'Descanso',
+        'FT': 'Finalizado',
+        'ET': 'Prórroga',
+        'BT': 'Pausa',
+        'P': 'Penaltis',
+        'NS': 'No iniciado',
+        'AET': 'Fin Prórroga',
+        'PEN': 'Fin Penaltis',
+        'SUSP': 'Suspendido',
+        'INT': 'Interrumpido',
+        'PST': 'Pospuesto',
+        'CANC': 'Cancelado',
+        'ABD': 'Abandonado',
+        'AWD': 'Adjudicado',
+        'WO': 'Walkover',
+        'LIVE': 'En vivo',
+        'TBD': 'A determinar',
+    }
+    
+    chart_data = []
+    for item in status_counts:
+        status_code = item['status_short']
+        label = status_labels.get(status_code, status_code)
+        chart_data.append((label, item['count']))
+    
+    # Ordenar por cantidad descendente
+    chart_data.sort(key=lambda x: x[1], reverse=True)
+    
+    return chart_data
+
+
+def get_league_chart_data():
+    """
+    Obtiene datos formateados para el gráfico de partidos por liga
+    """
+    league_counts = LiveFixtureData.objects.values('league_name', 'league_id').annotate(
+        count=Count('league_id')
+    ).order_by('-count')
+    
+    # Limitar a las 8 ligas principales
+    return list(league_counts[:8])
+
+
+def get_odds_chart_data():
+    """
+    Obtiene estadísticas sobre el estado de las cuotas
+    """
+    odds_data = LiveOddsData.objects.all()
+    
+    stats = {
+        'active': odds_data.filter(is_blocked=False, is_stopped=False, is_finished=False).count(),
+        'blocked': odds_data.filter(is_blocked=True).count(),
+        'stopped': odds_data.filter(is_blocked=False, is_stopped=True, is_finished=False).count(),
+        'finished': odds_data.filter(is_finished=True).count(),
+    }
+    
+    return stats
+
+
+def get_unique_leagues(fixtures):
+    """
+    Obtiene lista de ligas únicas para el filtro del dashboard
+    """
+    leagues = {}
+    for fixture in fixtures:
+        if fixture.league_id not in leagues:
+            leagues[fixture.league_id] = {
+                'id': fixture.league_id,
+                'name': fixture.league_name,
+                'country': getattr(fixture, 'league_country', '')
+            }
+    
+    # Convertir el diccionario a una lista ordenada por nombre
+    sorted_leagues = sorted(leagues.values(), key=lambda x: x['name'])
+    
+    return sorted_leagues
+
+
+def enrich_fixtures_with_odds(fixtures):
+    """
+    Enriquece los datos de partidos con información de cuotas
+    """
+    # Obtener IDs de todos los partidos
+    fixture_ids = [fixture.fixture_id for fixture in fixtures]
+    
+    # Obtener todas las cuotas relacionadas en una sola consulta
+    odds_data = LiveOddsData.objects.filter(fixture_id__in=fixture_ids)
+    
+    # Crear un diccionario para acceso rápido
+    odds_dict = {odds.fixture_id: odds for odds in odds_data}
+    
+    # Crear una copia profunda de los fixtures para manipular
+    enriched_fixtures = []
+    
+    for fixture in fixtures:
+        # Crear una copia del fixture como diccionario
+        fixture_dict = {
+            'fixture_id': fixture.fixture_id,
+            'league_id': fixture.league_id,
+            'league_name': fixture.league_name,
+            'league_country': getattr(fixture, 'league_country', ''),
+            'league_logo': fixture.league_logo,  # Aseguramos que el logo de la liga se incluya
+            'home_team_name': fixture.home_team_name,
+            'home_team_logo': fixture.home_team_logo,
+            'home_goals': fixture.home_goals,
+            'away_team_name': fixture.away_team_name,
+            'away_team_logo': fixture.away_team_logo,
+            'away_goals': fixture.away_goals,
+            'status_short': fixture.status_short,
+            'status_long': fixture.status_long,
+            'elapsed': fixture.elapsed,
+            'elapsed_seconds': getattr(fixture, 'elapsed_seconds', None),
+            'venue_name': getattr(fixture, 'venue_name', ''),
+            'venue_city': getattr(fixture, 'venue_city', ''),
+            'date': getattr(fixture, 'date', None),
+            'odds': None,  # Placeholder para las cuotas
+        }
+        
+        # Añadir información de cuotas si está disponible
+        if fixture.fixture_id in odds_dict:
+            live_odds = odds_dict[fixture.fixture_id]
+            odds_values = {}
+            
+            # Buscar categoría "Match Winner" (Ganador del partido)
+            try:
+                match_winner_category = live_odds.odds_categories.filter(name__icontains="Match Winner").first()
+                
+                if match_winner_category:
+                    # Obtener valores para esta categoría
+                    for value in match_winner_category.values.all():
+                        if value.value == 'Home':
+                            odds_values['home'] = float(value.odd)
+                        elif value.value == 'Draw':
+                            odds_values['draw'] = float(value.odd)
+                        elif value.value == 'Away':
+                            odds_values['away'] = float(value.odd)
+                
+                # Si no encontramos valores específicos, intentar con Double Chance
+                if not odds_values:
+                    double_chance = live_odds.odds_categories.filter(name__icontains="Double Chance").first()
+                    if double_chance:
+                        # Para doble oportunidad, los valores son diferentes
+                        dc_values = {}
+                        for value in double_chance.values.all():
+                            dc_values[value.value] = float(value.odd)
+                        
+                        # Añadir estos valores al diccionario
+                        fixture_dict['double_chance'] = dc_values
+                    
+                # Añadir "Over/Under" si existe
+                over_under = live_odds.odds_categories.filter(name__icontains="Over/Under").first()
+                if over_under:
+                    ou_values = {}
+                    for value in over_under.values.all():
+                        handicap = value.handicap or "2.5"  # Valor por defecto
+                        key = f"{value.value}_{handicap}"
+                        ou_values[key] = float(value.odd)
+                    
+                    # Añadir al diccionario
+                    fixture_dict['over_under'] = ou_values
+                
+                if odds_values:
+                    fixture_dict['odds'] = odds_values
+                
+            except Exception as e:
+                # Si hay error al procesar las cuotas, simplemente no las incluimos
+                pass
+                
+        enriched_fixtures.append(fixture_dict)
+    
+    return enriched_fixtures
+
+
+@require_POST
+@csrf_exempt
+def toggle_live_task(request, task_type, task_id):
+    """
+    API para activar/desactivar una tarea en vivo
+    """
+    # Verificar que el usuario tiene permisos
+    if not request.user.is_staff:
+        return JsonResponse({'success': False, 'message': 'Permisos insuficientes'}, status=403)
+    
+    from .live_tasks import toggle_task_status
+    result = toggle_task_status(task_type, task_id)
+    
+    return JsonResponse(result)
+
+
+@require_POST
+@csrf_exempt
+def restart_live_task(request, task_type, task_id):
+    """
+    API para reiniciar una tarea fallida
+    """
+    # Verificar que el usuario tiene permisos
+    if not request.user.is_staff:
+        return JsonResponse({'success': False, 'message': 'Permisos insuficientes'}, status=403)
+    
+    from .live_tasks import restart_task
+    result = restart_task(task_type, task_id)
+    
+    return JsonResponse(result)
+
+
+@require_POST
+@csrf_exempt
+def reset_stalled_task(request, task_type, task_id):
+    """
+    API para reiniciar una tarea con next_run en el pasado
+    """
+    # Verificar que el usuario tiene permisos
+    if not request.user.is_staff:
+        return JsonResponse({'success': False, 'message': 'Permisos insuficientes'}, status=403)
+    
+    from .live_tasks import reset_stalled_tasks
+    result = reset_stalled_tasks(task_type=task_type, task_id=task_id)
+    
+    return JsonResponse(result)
+
+
+@require_POST
+@csrf_exempt
+def reset_all_stalled_tasks(request):
+    """
+    API para reiniciar todas las tareas con next_run en el pasado
+    """
+    # Verificar que el usuario tiene permisos
+    if not request.user.is_staff:
+        return JsonResponse({'success': False, 'message': 'Permisos insuficientes'}, status=403)
+    
+    from .live_tasks import reset_stalled_tasks
+    result = reset_stalled_tasks()
+    
+    return JsonResponse(result)
+
+
+@require_GET
+def fixture_odds_detail(request, fixture_id):
+    """
+    Vista para mostrar todas las cuotas disponibles de un partido específico.
+    """
+    # Obtener los datos del partido
+    try:
+        fixture = LiveFixtureData.objects.filter(fixture_id=fixture_id).first()
+        if not fixture:
+            messages.error(request, f"No se encontró el partido con ID {fixture_id}")
+            return redirect('sports_data:live-dashboard')
+        
+        # Obtener las cuotas para este partido
+        odds_data = LiveOddsData.objects.filter(fixture_id=fixture_id).first()
+        
+        # Si no hay cuotas disponibles
+        if not odds_data:
+            context = {
+                'fixture': fixture,
+                'has_odds': False
+            }
+            return render(request, 'sports_data/fixture_odds_detail.html', context)
+        
+        # Obtener todas las categorías de cuotas con sus respectivos valores
+        odds_categories = odds_data.odds_categories.all().prefetch_related('values')
+        
+        # Organizar las categorías por tipos comunes
+        organized_categories = {
+            'main': [],       # Categorías principales como Match Winner, Double Chance
+            'goals': [],      # Categorías de goles como Over/Under, Exact Score
+            'halftime': [],   # Categorías de primer tiempo
+            'corners': [],    # Esquinas
+            'cards': [],      # Tarjetas
+            'other': []       # Otras categorías
+        }
+        
+        # Clasificar cada categoría
+        for category in odds_categories:
+            if any(term in category.name.lower() for term in ['winner', 'win', '1x2', 'chance']):
+                organized_categories['main'].append(category)
+            elif any(term in category.name.lower() for term in ['goal', 'score', 'over', 'under', 'btts']):
+                organized_categories['goals'].append(category)
+            elif any(term in category.name.lower() for term in ['half', 'halftime', '1st']):
+                organized_categories['halftime'].append(category)
+            elif 'corner' in category.name.lower():
+                organized_categories['corners'].append(category)
+            elif any(term in category.name.lower() for term in ['card', 'booking', 'yellow', 'red']):
+                organized_categories['cards'].append(category)
+            else:
+                organized_categories['other'].append(category)
+        
+        context = {
+            'fixture': fixture,
+            'odds_data': odds_data,
+            'categories': organized_categories,
+            'has_odds': True
+        }
+        
+        return render(request, 'sports_data/fixture_odds_detail.html', context)
+    
+    except Exception as e:
+        messages.error(request, f"Error al obtener las cuotas: {str(e)}")
+        return redirect('sports_data:live-dashboard')
+
+
+@staff_member_required
+@require_POST
+@csrf_exempt
+def run_update_live_fixtures(request):
+    """Ejecuta manualmente la tarea de actualización de partidos en vivo."""
+    from .models import LiveFixtureTask
+    task = LiveFixtureTask.objects.filter(is_enabled=True).order_by('id').first()
+    if not task:
+        return JsonResponse({'success': False, 'message': 'No hay tarea de partidos en vivo habilitada.'})
+    result = update_live_fixtures.apply(args=(task.id,)).get()
+    return JsonResponse({'success': result.get('success', False), 'message': result.get('message', 'Tarea ejecutada.'), 'details': result})
+
+
+@staff_member_required
+@require_POST
+@csrf_exempt
+def run_update_live_odds(request):
+    """Ejecuta manualmente la tarea de actualización de cuotas en vivo."""
+    from .models import LiveOddsTask
+    task = LiveOddsTask.objects.filter(is_enabled=True).order_by('id').first()
+    if not task:
+        return JsonResponse({'success': False, 'message': 'No hay tarea de cuotas en vivo habilitada.'})
+    result = update_live_odds.apply(args=(task.id,)).get()
+    return JsonResponse({'success': result.get('success', False), 'message': result.get('message', 'Tarea ejecutada.'), 'details': result})
+
+
+def fixture_widget(request, fixture_id):
+    """
+    Vista para mostrar solo el widget de API-Football para un partido.
+    """
+    api_football_key = os.environ.get('API_FOOTBALL_KEY') or getattr(settings, 'API_FOOTBALL_KEY', None)
+    context = {
+        'fixture_id': fixture_id,
+        'api_football_key': api_football_key,
+    }
+    return render(request, 'sports_data/fixture_widget.html', context)

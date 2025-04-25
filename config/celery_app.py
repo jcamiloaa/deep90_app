@@ -30,8 +30,20 @@ app.autodiscover_tasks()
 
 # Configure periodic tasks
 app.conf.beat_schedule = {
-    'schedule-periodic-tasks': {
-        'task': 'deep90_app.apps.sports_data.tasks.schedule_periodic_tasks',
-        'schedule': crontab(minute='*/5'),  # Ejecutar cada 5 minutos
+    # Tarea para programar la ejecución de tareas API de fútbol
+    "schedule-api-football-tasks": {
+        "task": "deep90_app.apps.sports_data.tasks.schedule_periodic_tasks",
+        "schedule": crontab(minute="*/5"),  # Cada 5 minutos
+    },
+    # Tarea para supervisar la ejecución de tareas en vivo
+    "schedule-live-football-tasks": {
+        "task": "deep90_app.apps.sports_data.live_tasks.schedule_live_tasks",
+        "schedule": crontab(minute="*"),  # Cada minuto
+    },
+    # Nueva tarea para verificar y corregir tareas desincronizadas
+    "check-stalled-tasks": {
+        "task": "deep90_app.apps.sports_data.live_tasks.check_and_reset_stalled_tasks",
+        "schedule": crontab(minute="*/3"),  # Cada 3 minutos
+        "options": {"expires": 60},  # La tarea expira a los 60 segundos si no se ejecuta
     },
 }
