@@ -539,12 +539,7 @@ class WhatsAppService:
             },
             {
                 "title": "Asistente IA",
-                "rows": [
-                    {
-                        "id": "assistant",
-                        "title": "Hablar con asistente",
-                        "description": "Conversa con nuestro asistente de fútbol"
-                    },
+                "rows": [                   
                     {
                         "id": "help",
                         "title": "Ayuda y soporte",
@@ -553,6 +548,13 @@ class WhatsAppService:
                 ]
             }
         ]
+
+
+        #  {
+        #                 "id": "assistant",
+        #                 "title": "Hablar con asistente",
+        #                 "description": "Conversa con nuestro asistente de fútbol"
+        #             },
         
         return self.send_list_template(
             to=to,

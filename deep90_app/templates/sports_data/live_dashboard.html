@@ -25,11 +25,6 @@
         font-weight: 700;
         margin-bottom: 0.5rem;
     }
-    .dashboard-hero .refresh-timer {
-        font-size: 1.1rem;
-        color: #e0eaff;
-        margin-right: 1rem;
-    }
     .dashboard-hero .btn {
         box-shadow: 0 2px 8px rgba(0,0,0,0.07);
         font-weight: 500;
@@ -191,7 +186,6 @@
 <div class="dashboard-hero mb-4">
     <div>
         <h1>{% trans "Panel de Datos en Vivo" %}</h1>
-        <div class="refresh-timer" id="refresh-countdown">Actualizando en: 30s</div>
     </div>
     <div>
         <button class="btn btn-light btn-lg shadow-sm" id="refresh-now">
@@ -513,6 +507,9 @@
                                 </a>
                                 <a href="{% url 'sports_data:fixture-widget' fixture_id=fixture.fixture_id %}" class="btn btn-sm btn-outline-info mt-2">
                                     <i class="fa fa-info-circle me-1"></i> {% trans "Ver detalle del partido" %}
+                                </a>
+                                <a href="{% url 'sports_data:api-live-fixture-detail' fixture_id=fixture.fixture_id %}" target="_blank" class="btn btn-sm btn-outline-dark mt-2">
+                                    <i class="fa fa-code"></i> Ver JSON en vivo
                                 </a>
                             </div>
                         </div>

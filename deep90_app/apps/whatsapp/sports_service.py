@@ -4,6 +4,9 @@ from django.utils import timezone
 from django.db.models import Q
 from deep90_app.apps.sports_data.models import FixtureData, LeagueData, StandingData
 from collections import defaultdict
+import json
+from deep90_app.apps.sports_data.models import LiveFixtureData, LiveOddsData, LiveOddsCategory, LiveOddsValue
+from django.core.exceptions import ObjectDoesNotExist
 
 logger = logging.getLogger(__name__)
 
@@ -197,4 +200,53 @@ class FootballDataService:
 
         message += "Información actualizada por Deep90."
         return message
+
+def consultar_partido_en_vivo(fixture_id):
+    """
+    Consulta datos en tiempo real de un fixture de fútbol en vivo y retorna un JSON estructurado
+    con toda la información del partido y detalle de odds.
+    """
+    try:
+        fixture = LiveFixtureData.objects.filter(fixture_id=fixture_id).order_by('-updated_at').first()
+        if not fixture:
+            return json.dumps({"error": "No se encontró el partido en vivo con ese fixture_id."})
+        fixture_data = {
+            field.name: getattr(fixture, field.name) for field in fixture._meta.fields if field.name != 'raw_data'
+        }
+        # Incluir raw_data si existe
+        if fixture.raw_data:
+            fixture_data['raw_data'] = fixture.raw_data
+        odds = LiveOddsData.objects.filter(fixture_id=fixture_id).order_by('-updated_at').first()
+        if not odds:
+            odds_data = None
+        else:
+            odds_data = {field.name: getattr(odds, field.name) for field in odds._meta.fields if field.name not in ['raw_odds_data']}
+            if odds.raw_odds_data:
+                odds_data['raw_odds_data'] = odds.raw_odds_data
+            # Agregar categorías y valores
+            categories = []
+            for cat in odds.odds_categories.all():
+                cat_data = {
+                    'id': cat.category_id,
+                    'name': cat.name,
+                    'values': [
+                        {
+                            'value': v.value,
+                            'odd': v.odd,
+                            'handicap': v.handicap,
+                            'main': v.main,
+                            'suspended': v.suspended
+                        } for v in cat.values.all()
+                    ]
+                }
+                categories.append(cat_data)
+            odds_data['categories'] = categories
+        return json.dumps({
+            'fixture': fixture_data,
+            'odds': odds_data
+        }, ensure_ascii=False, default=str)
+    except ObjectDoesNotExist:
+        return json.dumps({"error": "No se encontró información para el fixture_id proporcionado."})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 

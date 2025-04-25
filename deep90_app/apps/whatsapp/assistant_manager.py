@@ -247,8 +247,10 @@ class AssistantManager:
         """
         try:
             # Mapear nombres de funciones a funciones reales
+            from .sports_service import consultar_partido_en_vivo
             function_map = {
-                "get_live_match_results": FootballDataService.get_live_match_results
+                "get_live_match_results": FootballDataService.get_live_match_results,
+                "consultar_partido_en_vivo": consultar_partido_en_vivo
             }
             
             # Verificar si la función existe

@@ -30,4 +30,7 @@ urlpatterns = [
     # Endpoints para ejecutar manualmente las tareas de live fixtures y live odds
     path("api/run-update-live-fixtures/", views.run_update_live_fixtures, name="run-update-live-fixtures"),
     path("api/run-update-live-odds/", views.run_update_live_odds, name="run-update-live-odds"),
+
+    # Nueva ruta para exponer el JSON de un partido en vivo y sus odds
+    path("api/live-fixture-detail/<int:fixture_id>/", views.api_live_fixture_detail, name="api-live-fixture-detail"),
 ]

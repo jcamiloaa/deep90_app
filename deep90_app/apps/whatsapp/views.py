@@ -14,8 +14,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from .services import WhatsAppService, OpenAIAssistantService
 from .models import WhatsAppUser, Conversation, Message, WhatsAppUserStatus, UserInput
-from ..sports_data.models import FixtureData
-from .tasks import process_whatsapp_message
+from .tasks import process_whatsapp_message, process_assistant_response
+from ..sports_data.models import LiveFixtureData
 from .flows import FootballDataFlow
 
 logger = logging.getLogger(__name__)

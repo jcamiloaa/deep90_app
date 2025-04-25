@@ -8,7 +8,7 @@ que permitirán a los usuarios consultar datos de partidos a través de WhatsApp
 import json
 import logging
 from django.utils.translation import gettext_lazy as _
-from deep90_app.apps.sports_data.models import FixtureData, LeagueData
+from deep90_app.apps.sports_data.models import FixtureData, LeagueData, LiveFixtureData
 
 logger = logging.getLogger(__name__)
 
@@ -335,8 +335,8 @@ class FootballDataFlow:
         """
         logger.debug("Generando pantalla SELECT_COUNTRY")
         
-        # Obtener países únicos de FixtureData
-        countries = FixtureData.objects.values_list('league_country', flat=True).distinct().order_by('league_country')
+        # Obtener países únicos de LiveFixtureData en lugar de FixtureData
+        countries = LiveFixtureData.objects.values_list('league_country', flat=True).distinct().order_by('league_country')
         
         # Crear una copia de la respuesta base
         screen_response = dict(cls.SCREEN_RESPONSES["SELECT_COUNTRY"])
@@ -370,7 +370,7 @@ class FootballDataFlow:
         logger.debug(f"Generando pantalla SELECT_FIXTURE para país {country}")
         
         # Obtener partidos del país seleccionado, limitado a los más recientes
-        fixtures = FixtureData.objects.filter(
+        fixtures = LiveFixtureData.objects.filter(
             league_country=country
         ).order_by('-date')[:20]  # Limitamos a 20 partidos para evitar sobrecarga
         
@@ -453,10 +453,10 @@ class FootballDataFlow:
         """
         logger.debug(f"Generando pantalla FIXTURE_DETAIL para partido ID: {fixture_id}")
         
-        # Obtener datos del partido
+        # Obtener datos del partido desde LiveFixtureData en lugar de FixtureData
         try:
-            logger.info(f"Buscando datos del partido con ID {fixture_id}")
-            fixture = FixtureData.objects.get(fixture_id=fixture_id)
+            logger.info(f"Buscando datos del partido en vivo con ID {fixture_id}")
+            fixture = LiveFixtureData.objects.get(fixture_id=fixture_id)
             
             # Crear una copia de la respuesta base
             screen_response = dict(cls.SCREEN_RESPONSES["FIXTURE_DETAIL"])
@@ -524,8 +524,8 @@ class FootballDataFlow:
             
             # Convertir todos los objetos de traducción a strings para que sean serializables
             return ensure_serializable(screen_response)
-        except FixtureData.DoesNotExist:
-            logger.error(f"No se encontró el partido con ID {fixture_id}")
+        except LiveFixtureData.DoesNotExist:
+            logger.error(f"No se encontró el partido en vivo con ID {fixture_id}")
             return cls._get_countries_screen()
     
     @classmethod
@@ -549,11 +549,12 @@ class FootballDataFlow:
         
         # Preparar las próximas acciones disponibles
         next_actions = [
-            {"id": "action_finish", "title": "Finalizar consulta"},
-            {"id": "action_predictions", "title": "Asistente para predicciones"},
-            {"id": "action_live_odds", "title": "Asistente para Probabilidades"},
-            {"id": "action_betting", "title": "Asistente para apuestas"}
+            {"id": "action_finish", "title": "🏠 Menu principal"},
+            {"id": "action_predictions", "title": "🤖 Hablemos sobre del partido"}
         ]
+        
+        # {"id": "action_live_odds", "title": "Asistente para Probabilidades"},
+        # {"id": "action_betting", "title": "Asistente para apuestas"}
         
         screen_response["data"]["next_actions"] = next_actions
         

@@ -179,13 +179,10 @@ def process_text_message(whatsapp_user, message_id, text):
             is_from_user=True,
             created_at__gte=today_start
         ).count()
-        
-        # Hard limit on daily messages for all users
-        if today_messages_count >= settings.DAILY_MESSAGES_LIMIT:
-            # Get URL from settings
+
+        # Solo limitar a usuarios FREE
+        if whatsapp_user.subscription_plan == SubscriptionPlan.FREE and today_messages_count >= settings.DAILY_MESSAGES_LIMIT:
             pricing_url = getattr(settings, 'URL_PLANS', "https://www.deep90.com/#pricing")
-            
-            # Notify user about the limit
             logger.info(f"User {whatsapp_user.phone_number} has exceeded daily message limit")
             whatsapp_service.send_text_message(
                 whatsapp_user.phone_number,
@@ -279,6 +276,15 @@ def process_text_message(whatsapp_user, message_id, text):
                 'name': whatsapp_user.full_name or whatsapp_user.profile_name or 'Usuario',
             }
             
+            # Add the user's prompt to the thread
+            # Agregar fecha, hora e instrucción de actualización de datos
+            now_str = datetime.now().strftime('%d/%m/%Y %H:%M')
+            text = (
+                f"{text}\n"
+                f". Nombre: {user_info['name']}. "
+                f". Fecha de consulta: {now_str}. "
+                f"Por favor, antes de responder, ejecuta siempre la función consultar_partido_en_vivo({conversation.fixture_id}) para obtener los datos más recientes del partido y sus cuotas."
+            )
             assistant_manager.add_message_to_thread(conversation.thread_id, text, user_info)
             
             # Determine which assistant to use based on conversation type
@@ -376,7 +382,15 @@ def process_flow_reply(whatsapp_user, message_id, nfm_data):
                 
                 if selected_action == 'action_predictions':
                     assistant_id = settings.ASSISTANT_ID_PREDICTIONS
-                    prompt_message = f"Hola, necesito ayuda con predicciones para el partido con ID: {fixture_id}. ¿Cuál es tu análisis?"
+                    # Agregar nombre, fecha y la instrucción de ejecutar consultar_partido_en_vivo
+                    now_str = datetime.now().strftime('%d/%m/%Y %H:%M')
+                    user_name = whatsapp_user.full_name or whatsapp_user.profile_name or 'Usuario'
+                    prompt_message = (
+                        f"Hola, me llamo {user_name}. Necesito ayuda con predicciones para el partido con ID: {fixture_id}. "
+                        f"¿Cuál es tu análisis?\n"
+                        f"Fecha de consulta: {now_str}. "
+                        f"Por favor, antes de responder, ejecuta siempre la función consultar_partido_en_vivo({fixture_id}) para obtener los datos más recientes del partido y sus cuotas."
+                    )
                 
                 elif selected_action == 'action_live_odds':
                     assistant_id = settings.ASSISTANT_ID_LIVE_ODDS
@@ -501,17 +515,18 @@ def start_specialized_assistant_conversation(whatsapp_user, assistant_id, prompt
                 fixture_id=fixture_id
             )
         
-        # Send a welcome message 
-        welcome_msg = "🤖 *Modo Asistente Especializado Activado* 🤖\n\n"
-        
+        # Send a friendly, concise welcome message
+        welcome_msg = "*¡Listo! tu asistente especializado activado* 🤖\n\n"
+
         if conversation_type == ConversationType.PREDICTIONS:
-            welcome_msg += "Estoy conectándote con nuestro asistente de predicciones. Te ayudará a analizar el partido y proporcionarte predicciones basadas en datos históricos y estadísticas actuales."
+            welcome_msg += (
+            "Puedes preguntar por todo lo relacionado con el partido en vivo, pronósticos y análisis. 😉"
+            )
         elif conversation_type == ConversationType.LIVE_ODDS:
-            welcome_msg += "Estoy conectándote con nuestro asistente de probabilidades en vivo. Te mantendrá informado de las cuotas y probabilidades actualizadas para diferentes mercados de apuestas."
+            welcome_msg += "Aquí tienes al asistente de cuotas en vivo. ¿Quieres saber las probabilidades y cuotas del partido? ¡Dímelo!"
         elif conversation_type == ConversationType.BETTING:
-            welcome_msg += "Estoy conectándote con nuestro asistente de apuestas. Te brindará recomendaciones personalizadas basadas en los datos y tendencias más recientes."
-        
-        welcome_msg += "\n\nPara salir, escribe 'salir' o 'exit'."
+            welcome_msg += "Te paso con el crack de apuestas. ¿Buscas recomendaciones para apostar? Pregúntame sin miedo."
+
         
         whatsapp_service.send_text_message(
             whatsapp_user.phone_number,
@@ -556,6 +571,17 @@ def start_specialized_assistant_conversation(whatsapp_user, assistant_id, prompt
             conversation.update_last_message_time()
             
             # Add the user's prompt to the thread
+            # Agregar fecha, hora e instrucción de actualización de datos
+            now_str = datetime.now().strftime('%d/%m/%Y %H:%M')
+            prompt_message = (
+                f"{prompt_message}\n"
+                f". Nombre: {user_info['name']}. "
+                f"|Fecha de consulta: {now_str}. "
+                f"|Por favor, antes de responder, ejecuta siempre la función consultar_partido_en_vivo({fixture_id}) para obtener los datos más recientes del partido y sus cuotas."
+            )
+
+            logger.info(f"-----------------------------------> Adding message to thread {thread_id}: {user_info['name']}")
+            
             assistant_manager.add_message_to_thread(thread_id, prompt_message, user_info)
             
             # Run the appropriate assistant
@@ -564,7 +590,7 @@ def start_specialized_assistant_conversation(whatsapp_user, assistant_id, prompt
             # Send typing indicator
             whatsapp_service.send_text_message(
                 whatsapp_user.phone_number,
-                "⏳ Procesando..."
+                "⏳ Escribiendo..."
             )
             
             # Queue task to check run completion

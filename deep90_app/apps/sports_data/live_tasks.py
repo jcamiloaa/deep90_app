@@ -311,6 +311,16 @@ def reset_stalled_tasks(task_type: str = None, task_id: int = None) -> Dict[str,
         }
 
 
+def clean_invalid_periodic_tasks():
+    """
+    Elimina tareas periódicas de django-celery-beat que tengan como task
+    'deep90_app.apps.sports_data.live_tasks.monitor_live_tasks', ya que no es una tarea Celery válida.
+    """
+    deleted, _ = PeriodicTask.objects.filter(task='deep90_app.apps.sports_data.live_tasks.monitor_live_tasks').delete()
+    logger.info(f"Eliminadas {deleted} tareas periódicas inválidas de monitor_live_tasks")
+    return deleted
+
+
 @shared_task
 def check_and_reset_stalled_tasks() -> Dict[str, Any]:
     """

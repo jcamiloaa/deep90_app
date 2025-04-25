@@ -16,6 +16,7 @@ from django.views.decorators.http import require_POST, require_GET
 import json
 import os
 from django.conf import settings
+from deep90_app.apps.whatsapp.sports_service import consultar_partido_en_vivo
 
 from .models import (
     ScheduledTask, APIEndpoint, APIResult, 
@@ -808,3 +809,12 @@ def fixture_widget(request, fixture_id):
         'api_football_key': api_football_key,
     }
     return render(request, 'sports_data/fixture_widget.html', context)
+
+
+@require_GET
+def api_live_fixture_detail(request, fixture_id):
+    """
+    API: Devuelve el JSON estructurado de un partido en vivo y sus odds.
+    """
+    json_result = consultar_partido_en_vivo(fixture_id)
+    return JsonResponse(json.loads(json_result), safe=False)
