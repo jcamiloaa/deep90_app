@@ -628,6 +628,44 @@ class AssistantConfigFlowDataView(View):
             
             logger.debug(f"Datos descifrados: {decrypted_data}")
             
+            # Leer los data-source dinámicos desde settings
+            try:
+                data_source_1 = json.loads(getattr(settings, 'DATA_SOURCE_CONFIG_ANALYTICS_1', '[]'))
+                logger.debug(f"DATA_SOURCE_CONFIG_ANALYTICS_1 cargado: {data_source_1}")
+            except Exception as e:
+                logger.error(f"Error al cargar DATA_SOURCE_CONFIG_ANALYTICS_1: {str(e)}")
+                data_source_1 = [
+                    {"id": "normal", "title": "Lenguaje sencillo"},
+                    {"id": "tecnico", "title": "Técnico y analítico"}
+                ]
+            
+            try:
+                data_source_2 = json.loads(getattr(settings, 'DATA_SOURCE_CONFIG_ANALYTICS_2', '[]'))
+                logger.debug(f"DATA_SOURCE_CONFIG_ANALYTICS_2 cargado: {data_source_2}")
+            except Exception as e:
+                logger.error(f"Error al cargar DATA_SOURCE_CONFIG_ANALYTICS_2: {str(e)}")
+                data_source_2 = [
+                    {"id": "baja", "title": "Principiante"},
+                    {"id": "media", "title": "Intermedio"},
+                    {"id": "alta", "title": "Avanzado"}
+                ]
+                
+            try:
+                data_source_3 = json.loads(getattr(settings, 'DATA_SOURCE_CONFIG_ANALYTICS_3', '[]'))
+                logger.debug(f"DATA_SOURCE_CONFIG_ANALYTICS_3 cargado: {data_source_3}")
+            except Exception as e:
+                logger.error(f"Error al cargar DATA_SOURCE_CONFIG_ANALYTICS_3: {str(e)}")
+                data_source_3 = [
+                    {"id": "resultado", "title": "Resultado del partido"},
+                    {"id": "goles", "title": "Cantidad de goles"},
+                    {"id": "cuotas", "title": "Cuotas y apuestas"},
+                    {"id": "jugadores", "title": "Rendimiento de jugadores"}
+                ]
+
+            # Cargar el JSON base del flujo
+            from .flows_config import ASSISTANT_CONFIG_FLOW_JSON
+            flow_json = json.loads(json.dumps(ASSISTANT_CONFIG_FLOW_JSON))  # deep copy
+
             # Extraer información importante
             action = decrypted_data.get('action', '').lower()
             screen = decrypted_data.get('screen', '')
@@ -687,7 +725,11 @@ class AssistantConfigFlowDataView(View):
                     # Pasar a la pantalla de configuración de personalidad
                     response_data = {
                         "screen": "CONFIG_PERSONALITY",
-                        "data": {}
+                        "data": {
+                            # Añadir los arrays de datos para los RadioButtonsGroup
+                            "language_styles": data_source_1,
+                            "experience_levels": data_source_2
+                        }
                     }
                     
                     # Prellenar con datos existentes si están disponibles
@@ -715,7 +757,8 @@ class AssistantConfigFlowDataView(View):
                         "data": {
                             "assistant_name": assistant_name,
                             "language_style": language_style,
-                            "experience_level": experience_level
+                            "experience_level": experience_level,
+                            "prediction_types": data_source_3
                         }
                     }
                     

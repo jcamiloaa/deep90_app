@@ -433,7 +433,7 @@ def process_flow_reply(whatsapp_user, message_id, nfm_data):
                 # Actualizar o crear la configuración del asistente
                 assistant_config, created = AssistantConfig.objects.get_or_create(user=whatsapp_user)
                 
-                # Actualizar campos si se recibieron en la respuesta
+                # Actualizar campos con los valores exactos recibidos, sin transformación
                 if assistant_name:
                     assistant_config.assistant_name = assistant_name
                 
@@ -444,7 +444,7 @@ def process_flow_reply(whatsapp_user, message_id, nfm_data):
                     assistant_config.experience_level = experience_level
                 
                 if prediction_types:
-                    # Si es string, convertir a lista
+                    # Siempre asegurarnos que sea una lista
                     if isinstance(prediction_types, str):
                         assistant_config.prediction_types = [prediction_types]
                     else:
@@ -453,13 +453,22 @@ def process_flow_reply(whatsapp_user, message_id, nfm_data):
                 # Guardar cambios
                 assistant_config.save()
                 
+                # Obtener textos para mostrar según los valores guardados (no mediante lógica hardcodeada)
+                language_style_display = next(
+                    (item["title"] for item in json.loads(getattr(settings, 'DATA_SOURCE_CONFIG_ANALYTICS_1', '[]')) 
+                    if item["id"] == language_style), language_style)
+                
+                experience_level_display = next(
+                    (item["title"] for item in json.loads(getattr(settings, 'DATA_SOURCE_CONFIG_ANALYTICS_2', '[]'))
+                    if item["id"] == experience_level), experience_level)
+                
                 # Enviar mensaje de confirmación
                 whatsapp_service.send_text_message(
                     whatsapp_user.phone_number, 
                     f"✅ ¡Tu asistente ha sido personalizado!\n\n"
                     f"*Nombre:* {assistant_config.assistant_name}\n"
-                    f"*Estilo:* {'Técnico' if assistant_config.language_style == 'tecnico' else 'Normal'}\n"
-                    f"*Experiencia:* {'Alta' if assistant_config.experience_level == 'alta' else ('Media' if assistant_config.experience_level == 'media' else 'Baja')}\n"
+                    f"*Estilo:* {language_style_display}\n"
+                    f"*Experiencia:* {experience_level_display}\n"
                     f"*Tipos de predicciones:* {', '.join(assistant_config.prediction_types if isinstance(assistant_config.prediction_types, list) else [assistant_config.prediction_types])}\n\n"
                     f"Ahora puedes hablar con tu asistente personalizado y te responderá según tus preferencias."
                 )
@@ -733,21 +742,33 @@ def process_list_reply(whatsapp_user, message_id, list_id):
             config = AssistantConfig.objects.filter(user=whatsapp_user).first()
 
             if config:
-                # Send current configuration message first
-                experience_level_text = {
-                    'baja': 'Baja',
-                    'media': 'Media',
-                    'alta': 'Alta'
-                }.get(config.experience_level, 'Media')
+                # Obtener textos para mostrar según los valores guardados desde las mismas fuentes de datos
+                try:
+                    # Obtener las fuentes de datos dinámicas desde settings
+                    style_data_source = json.loads(getattr(settings, 'DATA_SOURCE_CONFIG_ANALYTICS_1', '[]'))
+                    level_data_source = json.loads(getattr(settings, 'DATA_SOURCE_CONFIG_ANALYTICS_2', '[]'))
+                    
+                    # Buscar los títulos correspondientes a los IDs guardados
+                    language_style_text = next(
+                        (item["title"] for item in style_data_source if item["id"] == config.language_style), 
+                        config.language_style  # Usar el valor raw si no se encuentra
+                    )
+                    
+                    experience_level_text = next(
+                        (item["title"] for item in level_data_source if item["id"] == config.experience_level), 
+                        config.experience_level  # Usar el valor raw si no se encuentra
+                    )
+                except Exception as e:
+                    logger.warning(f"Error al obtener fuentes de datos dinámicas: {e}")
+                    # Fallback a valores tradicionales si hay error en las fuentes dinámicas
+                    language_style_text = config.language_style
+                    experience_level_text = config.experience_level
                 
-                language_style_text = {
-                    'tecnico': 'Técnico',
-                    'normal': 'Normal'
-                }.get(config.language_style, 'Normal')
-                
+                # Procesar los tipos de predicción
                 prediction_types_list = config.prediction_types
                 prediction_types_text = ", ".join(prediction_types_list) if isinstance(prediction_types_list, list) and prediction_types_list else "No configurado"
                 
+                # Crear mensaje de configuración
                 config_message = (
                     "*Configuración Actual de tu Asistente*\n\n"
                     f"📝 *Nombre:* {config.assistant_name}\n"
@@ -1105,6 +1126,7 @@ def show_help(whatsapp_user):
     whatsapp_service.send_text_message(whatsapp_user.phone_number, help_message)
     time.sleep(1)
     whatsapp_service.display_main_menu(whatsapp_user.phone_number)
+
 
 
 @shared_task

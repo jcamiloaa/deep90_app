@@ -1,4 +1,9 @@
 # JSON de ejemplo para el flujo de configuración de personalidad del asistente
+import os
+import json
+from django.conf import settings
+
+# Los data-source se inyectarán dinámicamente desde la vista
 ASSISTANT_CONFIG_FLOW_JSON = {
     "version": "7.0",
     "data_api_version": "3.0",
@@ -36,6 +41,37 @@ ASSISTANT_CONFIG_FLOW_JSON = {
         {
             "id": "CONFIG_PERSONALITY",
             "title": "Personalidad del Asistente",
+            "data": {
+                "language_styles": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "string"},
+                            "title": {"type": "string"}
+                        }
+                    },
+                    "__example__": [
+                        {"id": "normal", "title": "Lenguaje sencillo"},
+                        {"id": "tecnico", "title": "Técnico y analítico T"}
+                    ]
+                },
+                "experience_levels": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "string"},
+                            "title": {"type": "string"}
+                        }
+                    },
+                    "__example__": [
+                        {"id": "baja", "title": "Principiante"},
+                        {"id": "media", "title": "Intermedio"},
+                        {"id": "alta", "title": "Avanzado"}
+                    ]
+                }
+            },
             "layout": {
                 "type": "SingleColumnLayout",
                 "children": [
@@ -57,21 +93,14 @@ ASSISTANT_CONFIG_FLOW_JSON = {
                                 "type": "RadioButtonsGroup",
                                 "label": "Estilo de lenguaje",
                                 "name": "language_style",
-                                "data-source": [
-                                    {"id": "normal", "title": "Lenguaje sencillo"},
-                                    {"id": "tecnico", "title": "Técnico y analítico"}
-                                ],
+                                "data-source": "${data.language_styles}",
                                 "required": True
                             },
                             {
                                 "type": "RadioButtonsGroup",
                                 "label": "Nivel de experiencia",
                                 "name": "experience_level",
-                                "data-source": [
-                                    {"id": "baja", "title": "Principiante"},
-                                    {"id": "media", "title": "Intermedio"},
-                                    {"id": "alta", "title": "Avanzado"}
-                                ],
+                                "data-source": "${data.experience_levels}",
                                 "required": True
                             },
                             {
@@ -95,6 +124,24 @@ ASSISTANT_CONFIG_FLOW_JSON = {
             "id": "CONFIG_PREFERENCES",
             "title": "Preferencias de Predicción",
             "terminal": True,
+            "data": {
+                "prediction_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "string"},
+                            "title": {"type": "string"}
+                        }
+                    },
+                    "__example__": [
+                        {"id": "resultado", "title": "Resultado del partido"},
+                        {"id": "goles", "title": "Cantidad de goles"},
+                        {"id": "cuotas", "title": "Cuotas y apuestas"},
+                        {"id": "jugadores", "title": "Rendimiento de jugadores"}
+                    ]
+                }
+            },
             "layout": {
                 "type": "SingleColumnLayout",
                 "children": [
@@ -110,12 +157,7 @@ ASSISTANT_CONFIG_FLOW_JSON = {
                                 "type": "CheckboxGroup",
                                 "label": "Selecciona una o más opciones",
                                 "name": "prediction_types",
-                                "data-source": [
-                                    {"id": "resultado", "title": "Resultado del partido"},
-                                    {"id": "goles", "title": "Cantidad de goles"},
-                                    {"id": "cuotas", "title": "Cuotas y apuestas"},
-                                    {"id": "jugadores", "title": "Rendimiento de jugadores"}
-                                ],
+                                "data-source": "${data.prediction_types}",
                                 "required": True
                             },
                             {
