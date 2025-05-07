@@ -5,7 +5,7 @@ from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
 from django.conf import settings
 from openai import OpenAI
-from .models import WhatsAppUser, Conversation, Message, SubscriptionPlan, WhatsAppUserStatus
+from .models import WhatsAppUser, Conversation, Message, SubscriptionPlan, WhatsAppUserStatus, AssistantConfig
 from .assistant_manager import AssistantManager
 
 logger = logging.getLogger(__name__)
@@ -390,7 +390,6 @@ class WhatsAppService:
                             'flow_id': self.flow_sign_up,
                             'flow_cta': 'Completar Registro',
                             'mode': self.flow_mode,  # Changed from flow_mode to mode
-                            'flow_action': 'navigate',            
                             'flow_action_payload': {
                                 'screen': self.flow_sign_up_screem,
                                 'data': {                               
@@ -498,11 +497,9 @@ class WhatsAppService:
     
     def display_main_menu(self, to):
         """
-        Display the main menu organized by sections.
-        
+        Display the main menu organized by sections with updated functionalities.
         Args:
             to: Recipient phone number
-            
         Returns:
             API response
         """
@@ -511,57 +508,379 @@ class WhatsAppService:
                 "title": "Mi Cuenta",
                 "rows": [
                     {
-                        "id": "profile",
-                        "title": "Mi Perfil",
-                        "description": "Ver y completar mi información personal"
+                        "id": "update_data",
+                        "title": "Actualizar datos",
+                        "description": "Actualiza tus datos personales"
                     },
                     {
                         "id": "subscription",
                         "title": "Mi Suscripción",
-                        "description": "Gestionar o actualizar mi plan"
+                        "description": "Gestionar o consultar mi suscripción"
+                    },
+                    {
+                        "id": "config_analyst",
+                        "title": "Mi Analista",
+                        "description": "Configura la personalidad del asistente"
                     }
                 ]
             },
             {
-                "title": "Resultados y Partidos",
+                "title": "Fútbol en Vivo",
                 "rows": [
                     {
                         "id": "results",
-                        "title": "Resultados en vivo",
-                        "description": "Consultar partidos que se están jugando ahora"
+                        "title": "Todos los partidos",
+                        "description": "Ver todos los partidos en vivo"
                     },
                     {
-                        "id": "fixtures",
-                        "title": "Próximos partidos",
-                        "description": "Ver calendario de partidos"
+                        "id": "favorites",
+                        "title": "Favoritos",
+                        "description": "Agrega tus ligas y equipos favoritos"
                     }
                 ]
             },
             {
-                "title": "Asistente IA",
-                "rows": [                   
+                "title": "Más Opciones",
+                "rows": [
                     {
-                        "id": "help",
-                        "title": "Ayuda y soporte",
-                        "description": "Obtén información de uso y soporte"
+                        "id": "affiliate_marketing",
+                        "title": "Marketing de Afiliados",
+                        "description": "Gestiona tus referidos"
+                    },
+                    {
+                        "id": "deep90_channel",
+                        "title": "Canal Deep90",
+                        "description": "Únete a nuestro canal oficial"
                     }
                 ]
             }
         ]
-
-
-        #  {
-        #                 "id": "assistant",
-        #                 "title": "Hablar con asistente",
-        #                 "description": "Conversa con nuestro asistente de fútbol"
-        #             },
-        
         return self.send_list_template(
             to=to,
             text="Explora nuestras opciones en el menú principal",
             button_text="Ver opciones",
             sections=sections
         )
+
+    def handle_main_menu_selection(self, to, selection_id):
+        """
+        Handle the action for each main menu selection.
+        Args:
+            to: Recipient phone number
+            selection_id: The ID of the selected menu option
+        Returns:
+            API response
+        """
+        if selection_id == "update_data":
+            return self.send_update_data_flow(to)
+        elif selection_id == "subscription":
+            return self.send_subscriptions_flow(to)
+        elif selection_id == "config_analyst":
+            return self.send_config_analytics_flow(to)
+        elif selection_id == "results":
+            return self.send_live_results_flow(to)
+        elif selection_id == "favorites":
+            return self.send_favorites_flow(to)
+        elif selection_id == "affiliate_marketing":
+            return self.send_affiliate_marketing_flow(to)
+        elif selection_id == "deep90_channel":
+            channel_url = "https://whatsapp.com/channel/0029VaEQpKt0G0XhN8SCzJ3E"
+            return self.send_text_message(to, f"Únete a nuestro canal oficial de Deep90: {channel_url}")
+        else:
+            return self.send_text_message(to, "Opción no reconocida. Por favor, selecciona una opción válida del menú.")
+
+    def send_update_data_flow(self, to):
+        """
+        Send the update data flow to the user.
+        """
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {self.access_token}'
+        }
+        data = {
+            'messaging_product': 'whatsapp',
+            'recipient_type': 'individual',
+            'to': to,
+            'type': 'interactive',
+            'interactive': {
+                'type': 'flow',
+                'header': {
+                    'type': 'text',
+                    'text': 'Actualizar Datos'
+                },
+                'body': {
+                    'text': 'Actualiza tus datos personales para mejorar tu experiencia.'
+                },
+                'footer': {
+                    'text': 'Tus datos son privados y seguros.'
+                },
+                'action': {
+                    'name': 'flow',
+                    'parameters': {
+                        'flow_message_version': self.flow_version_messages,
+                        'flow_token': settings.WHATSAPP_FLOW_UPDATE_DATA_TOKEN,
+                        'flow_id': settings.WHATSAPP_FLOW_UPDATE_DATA,
+                        'flow_cta': 'Actualizar',
+                        'mode': self.flow_mode,
+                        'flow_action_payload': {
+                            'screen': settings.WHATSAPP_FLOW_UPDATE_DATA_SCREEM
+                        }
+                    }
+                }
+            }
+        }
+        response = requests.post(self.send_message_url, headers=headers, json=data)
+        if response.status_code == 200:
+            try:
+                message_id = response.json().get('messages', [{}])[0].get('id', None)
+                content = "Actualiza tus datos personales para mejorar tu experiencia."
+                self.log_message(to, content, 'flow_update_data', False, message_id, request_json=data, response_json=response.json())
+            except Exception as e:
+                logger.error(f"Error logging sent update data flow message: {e}")
+        else:
+            logger.error(f"Failed to send update data flow: {response.text}")
+        return response
+
+    def send_subscriptions_flow(self, to):
+        """
+        Send the subscriptions flow to the user.
+        """
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {self.access_token}'
+        }
+        data = {
+            'messaging_product': 'whatsapp',
+            'recipient_type': 'individual',
+            'to': to,
+            'type': 'interactive',
+            'interactive': {
+                'type': 'flow',
+                'header': {
+                    'type': 'text',
+                    'text': 'Mi Suscripción'
+                },
+                'body': {
+                    'text': 'Consulta y gestiona tu suscripción.'
+                },
+                'footer': {
+                    'text': 'Gestiona tu plan Deep90.'
+                },
+                'action': {
+                    'name': 'flow',
+                    'parameters': {
+                        'flow_message_version': self.flow_version_messages,
+                        'flow_token': settings.WHATSAPP_FLOW_SUBSCRIPTIONS_TOKEN,
+                        'flow_id': settings.WHATSAPP_FLOW_SUBSCRIPTIONS,
+                        'flow_cta': 'Gestionar',
+                        'mode': self.flow_mode,
+                        'flow_action_payload': {
+                            'screen': settings.WHATSAPP_FLOW_SUBSCRIPTIONS_SCREEM
+                        }
+                    }
+                }
+            }
+        }
+        response = requests.post(self.send_message_url, headers=headers, json=data)
+        if response.status_code == 200:
+            try:
+                message_id = response.json().get('messages', [{}])[0].get('id', None)
+                content = "Consulta y gestiona tu suscripción."
+                self.log_message(to, content, 'flow_subscriptions', False, message_id, request_json=data, response_json=response.json())
+            except Exception as e:
+                logger.error(f"Error logging sent subscriptions flow message: {e}")
+        else:
+            logger.error(f"Failed to send subscriptions flow: {response.text}")
+        return response
+
+    def send_config_analytics_flow(self, to):
+        """
+        Send the config analytics flow to the user.
+        """
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {self.access_token}'
+        }
+        data = {
+            'messaging_product': 'whatsapp',
+            'recipient_type': 'individual',
+            'to': to,
+            'type': 'interactive',
+            'interactive': {
+                'type': 'flow',
+                'header': {
+                    'type': 'text',
+                    'text': 'Configura tu Analista'
+                },
+                'body': {
+                    'text': 'Personaliza la personalidad de tu asistente.'
+                },
+                'footer': {
+                    'text': 'Haz tu experiencia única.'
+                },
+                'action': {
+                    'name': 'flow',
+                    'parameters': {
+                        'flow_message_version': self.flow_version_messages,
+                        'flow_token': settings.WHATSAPP_FLOW_CONFIG_ANALYTICS_TOKEN,
+                        'flow_id': settings.WHATSAPP_FLOW_CONFIG_ANALYTICS,
+                        'flow_cta': 'Configurar',
+                        'mode': self.flow_mode,
+                        'flow_action_payload': {
+                            'screen': settings.WHATSAPP_FLOW_CONFIG_ANALYTICS_SCREEM
+                        }
+                    }
+                }
+            }
+        }
+        response = requests.post(self.send_message_url, headers=headers, json=data)
+        if response.status_code == 200:
+            try:
+                message_id = response.json().get('messages', [{}])[0].get('id', None)
+                content = "Personaliza la personalidad de tu asistente."
+                self.log_message(to, content, 'flow_config', False, message_id, request_json=data, response_json=response.json())
+            except Exception as e:
+                logger.error(f"Error logging sent config analytics flow message: {e}")
+        else:
+            logger.error(f"Failed to send config analytics flow: {response.text}")
+        return response
+
+    def send_favorites_flow(self, to):
+        """
+        Send the favorites flow to the user.
+        """
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {self.access_token}'
+        }
+        data = {
+            'messaging_product': 'whatsapp',
+            'recipient_type': 'individual',
+            'to': to,
+            'type': 'interactive',
+            'interactive': {
+                'type': 'flow',
+                'header': {
+                    'type': 'text',
+                    'text': 'Favoritos'
+                },
+                'body': {
+                    'text': 'Agrega tus ligas y equipos favoritos.'
+                },
+                'footer': {
+                    'text': 'Personaliza tus preferencias.'
+                },
+                'action': {
+                    'name': 'flow',
+                    'parameters': {
+                        'flow_message_version': self.flow_version_messages,
+                        'flow_token': settings.WHATSAPP_FLOW_FAVORITES_TOKEN,
+                        'flow_id': settings.WHATSAPP_FLOW_FAVORITES,
+                        'flow_cta': 'Agregar',
+                        'mode': self.flow_mode,
+                        'flow_action_payload': {
+                            'screen': settings.WHATSAPP_FLOW_FAVORITES_SCREEM
+                        }
+                    }
+                }
+            }
+        }
+        response = requests.post(self.send_message_url, headers=headers, json=data)
+        if response.status_code == 200:
+            try:
+                message_id = response.json().get('messages', [{}])[0].get('id', None)
+                content = "Agrega tus ligas y equipos favoritos."
+                self.log_message(to, content, 'flow_favorites', False, message_id, request_json=data, response_json=response.json())
+            except Exception as e:
+                logger.error(f"Error logging sent favorites flow message: {e}")
+        else:
+            logger.error(f"Failed to send favorites flow: {response.text}")
+        return response
+
+    def send_affiliate_marketing_flow(self, to):
+        """
+        Send the affiliate marketing flow to the user.
+        """
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {self.access_token}'
+        }
+        data = {
+            'messaging_product': 'whatsapp',
+            'recipient_type': 'individual',
+            'to': to,
+            'type': 'interactive',
+            'interactive': {
+                'type': 'flow',
+                'header': {
+                    'type': 'text',
+                    'text': 'Marketing de Afiliados'
+                },
+                'body': {
+                    'text': 'Gestiona los usuarios que has referido.'
+                },
+                'footer': {
+                    'text': '¡Gana recompensas por tus referidos!'
+                },
+                'action': {
+                    'name': 'flow',
+                    'parameters': {
+                        'flow_message_version': self.flow_version_messages,
+                        'flow_token': settings.WHATSAPP_FLOW_AFFILIATE_TOKEN,
+                        'flow_id': settings.WHATSAPP_FLOW_AFFILIATE,
+                        'flow_cta': 'Gestionar',
+                        'mode': self.flow_mode,
+                        'flow_action_payload': {
+                            'screen': settings.WHATSAPP_FLOW_AFFILIATE_SCREEM
+                        }
+                    }
+                }
+            }
+        }
+        response = requests.post(self.send_message_url, headers=headers, json=data)
+        if response.status_code == 200:
+            try:
+                message_id = response.json().get('messages', [{}])[0].get('id', None)
+                content = "Gestiona los usuarios que has referido."
+                self.log_message(to, content, 'flow_affiliate_marketing', False, message_id, request_json=data, response_json=response.json())
+            except Exception as e:
+                logger.error(f"Error logging sent affiliate marketing flow message: {e}")
+        else:
+            logger.error(f"Failed to send affiliate marketing flow: {response.text}")
+        return response
+
+    def send_typing_indicator(self, message_id):
+        """
+        Send a typing indicator ("escribiendo...") to a WhatsApp user using the Business API.
+        Args:
+            message_id: The ID of the received message to mark as read and show typing
+        Returns:
+            API response
+        """
+        try:
+            headers = {
+                'Content-Type': 'application/json',
+                'Authorization': f'Bearer {self.access_token}'
+            }
+            data = {
+                'messaging_product': 'whatsapp',
+                'status': 'read',
+                'message_id': message_id,
+                'typing_indicator': {
+                    'type': 'text'
+                }
+            }
+            response = requests.post(
+                self.send_message_url,
+                headers=headers,
+                json=data
+            )
+            if response.status_code != 200:
+                logger.error(f"Failed to send typing indicator: {response.text}")
+            return response
+        except Exception as e:
+            logger.error(f"Error sending typing indicator: {e}")
+            raise
 
 
 class OpenAIAssistantService:

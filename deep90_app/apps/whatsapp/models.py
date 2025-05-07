@@ -223,3 +223,26 @@ class UserPreference(models.Model):
 
     def __str__(self):
         return f"Preferencias de {self.user}"
+
+
+class AssistantConfig(models.Model):
+    """Configuración personalizada del asistente para cada usuario."""
+    user = models.OneToOneField(
+        WhatsAppUser,
+        on_delete=models.CASCADE,
+        related_name="assistant_config",
+        verbose_name=_("Usuario")
+    )
+    assistant_name = models.CharField(_("Nombre del asistente"), max_length=50, default="Deep90 AI")
+    language_style = models.CharField(_("Estilo de lenguaje"), max_length=20, choices=[('tecnico', 'Técnico'), ('normal', 'Normal')], default='normal')
+    experience_level = models.CharField(_("Nivel de experiencia"), max_length=10, choices=[('baja', 'Baja'), ('media', 'Media'), ('alta', 'Alta')], default='media')
+    prediction_types = models.JSONField(_("Tipos de predicciones preferidas"), default=list, blank=True, help_text=_('Lista de tipos de predicción seleccionados'))
+    custom_settings = models.JSONField(_("Configuraciones adicionales"), default=dict, blank=True)
+    updated_at = models.DateTimeField(_("Última actualización"), auto_now=True)
+
+    class Meta:
+        verbose_name = _("Configuración de Asistente")
+        verbose_name_plural = _("Configuraciones de Asistente")
+
+    def __str__(self):
+        return f"Config de {self.user}"

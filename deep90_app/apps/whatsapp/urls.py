@@ -4,7 +4,10 @@ from .views import (
     AssistantWebhookView, 
     WhatsAppFlowWebhookView, 
     FootballFlowDataView,
-    whatsapp_flow_football
+    whatsapp_flow_football,
+    AssistantConfigFlowDataView,
+    whatsapp_flow_assistant_config,
+    AssistantConfigSaveView
 )
 
 app_name = "whatsapp"
@@ -24,5 +27,14 @@ urlpatterns = [
     
     # Endpoint para servir el JSON del flujo según la documentación de Meta
     path("flow/football/", whatsapp_flow_football, name="flow-football"),
+    
+    # Endpoint para datos del flujo de configuración de asistente
+    path("assistant-config-flow-data/", AssistantConfigFlowDataView.as_view(), name="assistant-config-flow-data"),
+    
+    # Endpoint para servir el JSON del flujo de configuración de asistente
+    path("flow/assistant-config/", whatsapp_flow_assistant_config, name="flow-assistant-config"),
+    
+    # Endpoint para guardar la configuración personalizada del asistente
+    path("assistant-config/save/", AssistantConfigSaveView.as_view(), name="assistant-config-save"),
 ]
 

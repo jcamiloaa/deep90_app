@@ -864,7 +864,7 @@ class FootballDataFlow:
                                             "payload": {
                                                 "selected_action": "${form.selected_action}",
                                                 "fixture_id": "${data.fixture_id}",
-                                                "id_flujo": "1033636801988224"
+                                                "flow_id": "1033636801988224"
                                             }
                                         }
                                     }

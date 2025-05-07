@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
-from .models import WhatsAppUser, Conversation, Message, UserInput, UserPreference
+from .models import WhatsAppUser, Conversation, Message, UserInput, UserPreference, AssistantConfig
 
 
 @admin.register(WhatsAppUser)
@@ -183,6 +183,33 @@ class UserPreferenceAdmin(admin.ModelAdmin):
         }),
         (_('Preferencias'), {
             'fields': ('language', 'favorite_teams', 'favorite_leagues', 'notification_preferences')
+        }),
+        (_('Fechas'), {
+            'fields': ('updated_at',)
+        }),
+    )
+
+
+@admin.register(AssistantConfig)
+class AssistantConfigAdmin(admin.ModelAdmin):
+    list_display = ['user', 'assistant_name', 'language_style', 'experience_level', 'updated_at']
+    list_filter = ['language_style', 'experience_level', 'updated_at']
+    search_fields = ['user__phone_number', 'user__full_name', 'assistant_name']
+    
+    readonly_fields = ['user', 'updated_at']
+    
+    fieldsets = (
+        (_('Usuario'), {
+            'fields': ('user',)
+        }),
+        (_('Configuración del Asistente'), {
+            'fields': ('assistant_name', 'language_style', 'experience_level')
+        }),
+        (_('Preferencias de Predicciones'), {
+            'fields': ('prediction_types',)
+        }),
+        (_('Configuración Adicional'), {
+            'fields': ('custom_settings',)
         }),
         (_('Fechas'), {
             'fields': ('updated_at',)

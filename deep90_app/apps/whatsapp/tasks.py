@@ -8,7 +8,7 @@ from django.conf import settings
 from django.utils import timezone
 from .services import WhatsAppService
 from .assistant_manager import AssistantManager
-from .models import WhatsAppUser, Conversation, Message, WhatsAppUserStatus, SubscriptionPlan, ConversationType
+from .models import WhatsAppUser, Conversation, Message, WhatsAppUserStatus, SubscriptionPlan, ConversationType, AssistantConfig
 from .sports_service import FootballDataService
 
 logger = logging.getLogger(__name__)
@@ -281,9 +281,9 @@ def process_text_message(whatsapp_user, message_id, text):
             now_str = datetime.now().strftime('%d/%m/%Y %H:%M')
             text = (
                 f"{text}\n"
-                f". Nombre: {user_info['name']}. "
+                f". Nombre: {user_info['name']}. (No es necesario que siempre me llames por mi nombre, pero te lo digo para que lo sepas, en ocasiones peudes hacerlo para sentir mas cercano)\n"                
                 f". Fecha de consulta: {now_str}. "
-                f"Por favor, antes de responder, ejecuta siempre la función consultar_partido_en_vivo({conversation.fixture_id}) para obtener los datos más recientes del partido y sus cuotas."
+                f"Por favor, antes de responder, ejecuta siempre la función consultar_partido_en_vivo({conversation.fixture_id}) para obtener los datos más recientes del partido y sus cuotas\n"
             )
             assistant_manager.add_message_to_thread(conversation.thread_id, text, user_info)
             
@@ -301,11 +301,15 @@ def process_text_message(whatsapp_user, message_id, text):
             # Run the assistant
             run_id = assistant_manager.run_assistant(conversation.thread_id, assistant_id)
             
-            # Send typing indicator message
-            whatsapp_service.send_text_message(
-                whatsapp_user.phone_number,
-                "⏳ Procesando..."
-            )
+            # Send typing indicator message usando el message_id recibido
+            whatsapp_service.send_typing_indicator(message_id)
+
+            #time.sleep(1)  # Opcional: simula el tiempo de escritura
+            
+            # whatsapp_service.send_text_message(
+            #    whatsapp_user.phone_number,
+            #    "⏳ Procesando 2..."
+            #)
             
             # Queue task to check run completion
             process_assistant_run.delay(
@@ -359,7 +363,7 @@ def process_flow_reply(whatsapp_user, message_id, nfm_data):
             return
         
         # Check if it's from our live results flow
-        flow_id = response_data.get('id_flujo')
+        flow_id = response_data.get('flow_id')
         if flow_id == settings.WHATSAPP_FLOW_LIVE_RESULT:
             fixture_id = response_data.get('fixture_id')
             selected_action = response_data.get('selected_action')
@@ -389,7 +393,7 @@ def process_flow_reply(whatsapp_user, message_id, nfm_data):
                         f"Hola, me llamo {user_name}. Necesito ayuda con predicciones para el partido con ID: {fixture_id}. "
                         f"¿Cuál es tu análisis?\n"
                         f"Fecha de consulta: {now_str}. "
-                        f"Por favor, antes de responder, ejecuta siempre la función consultar_partido_en_vivo({fixture_id}) para obtener los datos más recientes del partido y sus cuotas."
+                        f"Por favor, antes de responder, ejecuta siempre la función consultar_partido_en_vivo({fixture_id}) para obtener los datos más recientes del partido y sus cuotas.\n"
                     )
                 
                 elif selected_action == 'action_live_odds':
@@ -409,6 +413,66 @@ def process_flow_reply(whatsapp_user, message_id, nfm_data):
                 whatsapp_service.send_text_message(
                     whatsapp_user.phone_number,
                     "No he podido procesar tu selección. Por favor intenta nuevamente desde el menú principal."
+                )
+                time.sleep(1)
+                whatsapp_service.display_main_menu(whatsapp_user.phone_number)
+        
+        elif flow_id == settings.WHATSAPP_FLOW_CONFIG_ANALYTICS:
+            # Procesar la respuesta del flujo de configuración del asistente
+            logger.info(f"Assistant config flow completed for user {whatsapp_user.phone_number}")
+            
+            # Extraer los datos de configuración
+            assistant_name = response_data.get('assistant_name')
+            language_style = response_data.get('language_style')
+            experience_level = response_data.get('experience_level')
+            prediction_types = response_data.get('prediction_types', [])
+            
+            logger.debug(f"Config data received: name={assistant_name}, style={language_style}, level={experience_level}, types={prediction_types}")
+            
+            try:
+                # Actualizar o crear la configuración del asistente
+                assistant_config, created = AssistantConfig.objects.get_or_create(user=whatsapp_user)
+                
+                # Actualizar campos si se recibieron en la respuesta
+                if assistant_name:
+                    assistant_config.assistant_name = assistant_name
+                
+                if language_style:
+                    assistant_config.language_style = language_style
+                
+                if experience_level:
+                    assistant_config.experience_level = experience_level
+                
+                if prediction_types:
+                    # Si es string, convertir a lista
+                    if isinstance(prediction_types, str):
+                        assistant_config.prediction_types = [prediction_types]
+                    else:
+                        assistant_config.prediction_types = prediction_types
+                
+                # Guardar cambios
+                assistant_config.save()
+                
+                # Enviar mensaje de confirmación
+                whatsapp_service.send_text_message(
+                    whatsapp_user.phone_number, 
+                    f"✅ ¡Tu asistente ha sido personalizado!\n\n"
+                    f"*Nombre:* {assistant_config.assistant_name}\n"
+                    f"*Estilo:* {'Técnico' if assistant_config.language_style == 'tecnico' else 'Normal'}\n"
+                    f"*Experiencia:* {'Alta' if assistant_config.experience_level == 'alta' else ('Media' if assistant_config.experience_level == 'media' else 'Baja')}\n"
+                    f"*Tipos de predicciones:* {', '.join(assistant_config.prediction_types if isinstance(assistant_config.prediction_types, list) else [assistant_config.prediction_types])}\n\n"
+                    f"Ahora puedes hablar con tu asistente personalizado y te responderá según tus preferencias."
+                )
+                
+                # Mostrar el menú principal después de unos segundos
+                time.sleep(1)
+                whatsapp_service.display_main_menu(whatsapp_user.phone_number)
+            
+            except Exception as e:
+                logger.error(f"Error updating assistant configuration: {e}")
+                whatsapp_service.send_text_message(
+                    whatsapp_user.phone_number,
+                    "Lo siento, ha ocurrido un error al guardar tu configuración. Por favor intenta nuevamente."
                 )
                 time.sleep(1)
                 whatsapp_service.display_main_menu(whatsapp_user.phone_number)
@@ -516,7 +580,7 @@ def start_specialized_assistant_conversation(whatsapp_user, assistant_id, prompt
             )
         
         # Send a friendly, concise welcome message
-        welcome_msg = "*¡Listo! tu asistente especializado activado* 🤖\n\n"
+        welcome_msg = "*Asistente especializado activado!* 🤖\n\n"
 
         if conversation_type == ConversationType.PREDICTIONS:
             welcome_msg += (
@@ -575,7 +639,7 @@ def start_specialized_assistant_conversation(whatsapp_user, assistant_id, prompt
             now_str = datetime.now().strftime('%d/%m/%Y %H:%M')
             prompt_message = (
                 f"{prompt_message}\n"
-                f". Nombre: {user_info['name']}. "
+                f". Nombre: {user_info['name']}. (No es necesario que siempre me llames por mi nombre, pero te lo digo para que lo sepas, en ocasiones peudes hacerlo para sentir mas cercano)\n"
                 f"|Fecha de consulta: {now_str}. "
                 f"|Por favor, antes de responder, ejecuta siempre la función consultar_partido_en_vivo({fixture_id}) para obtener los datos más recientes del partido y sus cuotas."
             )
@@ -590,7 +654,7 @@ def start_specialized_assistant_conversation(whatsapp_user, assistant_id, prompt
             # Send typing indicator
             whatsapp_service.send_text_message(
                 whatsapp_user.phone_number,
-                "⏳ Escribiendo..."
+                "⏳ Personalizando tu experiencia..."
             )
             
             # Queue task to check run completion
@@ -657,15 +721,67 @@ def process_list_reply(whatsapp_user, message_id, list_id):
             whatsapp_service.send_registration_flow(whatsapp_user.phone_number)
         else:
             show_profile(whatsapp_user)
+    elif list_id == 'update_data':
+        # Actualizar datos del usuario
+        whatsapp_service.send_update_data_flow(whatsapp_user.phone_number)
+    elif list_id == 'subscription':
+        # Gestionar suscripción
+        whatsapp_service.send_subscriptions_flow(whatsapp_user.phone_number)
+    elif list_id == 'config_analyst':
+        # Configurar analista - check if user already has configuration
+        try:
+            config = AssistantConfig.objects.filter(user=whatsapp_user).first()
+
+            if config:
+                # Send current configuration message first
+                experience_level_text = {
+                    'baja': 'Baja',
+                    'media': 'Media',
+                    'alta': 'Alta'
+                }.get(config.experience_level, 'Media')
+                
+                language_style_text = {
+                    'tecnico': 'Técnico',
+                    'normal': 'Normal'
+                }.get(config.language_style, 'Normal')
+                
+                prediction_types_list = config.prediction_types
+                prediction_types_text = ", ".join(prediction_types_list) if isinstance(prediction_types_list, list) and prediction_types_list else "No configurado"
+                
+                config_message = (
+                    "*Configuración Actual de tu Asistente*\n\n"
+                    f"📝 *Nombre:* {config.assistant_name}\n"
+                    f"🗣️ *Estilo de lenguaje:* {language_style_text}\n"
+                    f"📊 *Nivel de experiencia:* {experience_level_text}\n"
+                    f"🎯 *Tipos de predicciones:* {prediction_types_text}\n\n"
+                    "Puedes modificar esta configuración a continuación:"
+                )
+                logger.debug(f"Current configuration message: {config_message}")
+                whatsapp_service.send_text_message(whatsapp_user.phone_number, config_message)
+                time.sleep(1)  # Brief pause before sending the flow
+
+        except Exception as e:
+            logger.error(f"Error retrieving assistant configuration: {e}")
+            # Continue with normal flow if there's an error
+
+        # Send configuration flow regardless
+        whatsapp_service.send_config_analytics_flow(whatsapp_user.phone_number)
     elif list_id == 'results':
         # Mostrar resultados en vivo
-        show_results(whatsapp_user)
+        whatsapp_service.send_live_results_flow(whatsapp_user.phone_number)
     elif list_id == 'fixtures':
         # Mostrar próximos partidos
         show_fixtures(whatsapp_user)
-    elif list_id == 'subscription':
-        # Mostrar opciones de suscripción
-        show_subscription_options(whatsapp_user)
+    elif list_id == 'favorites':
+        # Gestionar favoritos
+        whatsapp_service.send_favorites_flow(whatsapp_user.phone_number)
+    elif list_id == 'affiliate_marketing':
+        # Marketing de afiliados
+        whatsapp_service.send_affiliate_marketing_flow(whatsapp_user.phone_number)
+    elif list_id == 'deep90_channel':
+        # Enviar enlace del canal Deep90
+        channel_url = "https://whatsapp.com/channel/0029VaEQpKt0G0XhN8SCzJ3E"
+        whatsapp_service.send_text_message(whatsapp_user.phone_number, f"Únete a nuestro canal oficial de Deep90: {channel_url}")
     elif list_id == 'help':
         # Mostrar ayuda
         show_help(whatsapp_user)
