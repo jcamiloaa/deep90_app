@@ -630,6 +630,22 @@ class AssistantConfigFlowDataView(View):
             
             # Leer los data-source dinámicos desde settings
             try:
+                data_source_welcome = json.loads(getattr(settings, 'DATA_SOURCE_CONFIG_ANALYTICS_WELCOME', '{}'))
+                welcome_text = data_source_welcome.get("text", [
+                    "🌟 *Personaliza tu experiencia:*\n\n• 🤖 **Nombre único** - ¡Crea su identidad!\n• 🎙️ **Estilo** - Técnico o coloquial\n• 📈 **Nivel de análisis** - Básico a Profundo",
+                    "✅ *Beneficios clave:*\n▸ Predicciones con tu sello personal 🎯\n▸ Datos en tiempo real de tus equipos ⏱️\n▸ Explicación de cuotas 🔔\n",
+                    "👇 *¡Vamos a configurar tu ANALISTA IDEAL!*"
+                ])
+                logger.debug(f"DATA_SOURCE_CONFIG_ANALYTICS_WELCOME cargado: {welcome_text}")
+            except Exception as e:
+                logger.error(f"Error al cargar DATA_SOURCE_CONFIG_ANALYTICS_WELCOME: {str(e)}")
+                welcome_text = [
+                    "🌟 *Personaliza tu experiencia:*\n\n• 🤖 **Nombre único** - ¡Crea su identidad!\n• 🎙️ **Estilo** - Técnico o coloquial\n• 📈 **Nivel de análisis** - Básico a Profundo",
+                    "✅ *Beneficios clave:*\n▸ Predicciones con tu sello personal 🎯\n▸ Datos en tiempo real de tus equipos ⏱️\n▸ Explicación de cuotas 🔔\n",
+                    "👇 *¡Vamos a configurar tu ANALISTA IDEAL!*"
+                ]
+            
+            try:
                 data_source_1 = json.loads(getattr(settings, 'DATA_SOURCE_CONFIG_ANALYTICS_1', '[]'))
                 logger.debug(f"DATA_SOURCE_CONFIG_ANALYTICS_1 cargado: {data_source_1}")
             except Exception as e:
@@ -662,10 +678,6 @@ class AssistantConfigFlowDataView(View):
                     {"id": "jugadores", "title": "Rendimiento de jugadores"}
                 ]
 
-            # Cargar el JSON base del flujo
-            from .flows_config import ASSISTANT_CONFIG_FLOW_JSON
-            flow_json = json.loads(json.dumps(ASSISTANT_CONFIG_FLOW_JSON))  # deep copy
-
             # Extraer información importante
             action = decrypted_data.get('action', '').lower()
             screen = decrypted_data.get('screen', '')
@@ -696,10 +708,10 @@ class AssistantConfigFlowDataView(View):
             
             # Manejar la acción INIT - Mostrar pantalla de bienvenida
             if action == 'init':
-                logger.debug("Manejando acción INIT - Mostrando pantalla de bienvenida")
                 response_data = {
                     "screen": "WELCOME",
                     "data": {
+                        "welcome_text": welcome_text,                        
                         "message": "¡Bienvenido al asistente de configuración de Deep90 AI!"
                     }
                 }
@@ -708,7 +720,7 @@ class AssistantConfigFlowDataView(View):
                 if flow_token:
                     response_data["flow_token"] = flow_token
                 
-                logger.debug(f"Enviando respuesta INIT: {response_data}")
+                logger.info(f"Enviando respuesta INIT: {response_data}")
                 
                 # Registrar la interacción para trazabilidad
                 self._log_interaction(wa_id, "INIT", decrypted_data, response_data)
@@ -727,6 +739,7 @@ class AssistantConfigFlowDataView(View):
                         "screen": "CONFIG_PERSONALITY",
                         "data": {
                             # Añadir los arrays de datos para los RadioButtonsGroup
+                            "welcome_text": welcome_text,
                             "language_styles": data_source_1,
                             "experience_levels": data_source_2
                         }
@@ -777,9 +790,11 @@ class AssistantConfigFlowDataView(View):
                     response_data = {
                         "screen": "WELCOME",
                         "data": {
+                            "welcome_text": welcome_text,                            
                             "message": "¡Bienvenido al asistente de configuración de Deep90 AI!"
                         }
                     }
+                    
                     if flow_token:
                         response_data["flow_token"] = flow_token
                 
@@ -789,7 +804,7 @@ class AssistantConfigFlowDataView(View):
                 # Cifrar y devolver la respuesta
                 encrypted_response = encrypt_response(response_data, aes_key, iv)
                 return HttpResponse(encrypted_response, content_type='text/plain')
-            
+
             # Manejar acción de completado (cuando el usuario finaliza el flujo)
             if action == 'complete':
                 logger.debug(f"Manejando acción complete para pantalla: {screen}")

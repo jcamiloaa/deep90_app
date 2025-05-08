@@ -16,20 +16,36 @@ ASSISTANT_CONFIG_FLOW_JSON = {
         {
             "id": "WELCOME",
             "title": "Configura tu Asistente de Fútbol",
+            "data": {
+                "welcome_text": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "__example__": [
+                        "🌟 *Personaliza tu experiencia:*\n\n• 🤖 **Nombre único** - ¡Crea su identidad!\n• 🎙️ **Estilo** - Técnico o coloquial\n• 📈 **Nivel de análisis** - Básico a Profundo",
+                        "✅ *Beneficios clave:*\n▸ Predicciones con tu sello personal 🎯\n▸ Datos en tiempo real de tus equipos ⏱️\n▸ Explicación de cuotas 🔔\n",
+                        "👇 *¡Vamos a configurar tu ANALISTA IDEAL!*"
+                    ]
+                }
+            },
             "layout": {
                 "type": "SingleColumnLayout",
                 "children": [
                     {
+                        "type": "Image",
+                        "src": "iVBORw0KGgoAAAANSUhEUgAABAAAAAQACAYAAAB",
+                        "height": 60,
+                        "scale-type": "cover"
+                    },
+                    {
                         "type": "TextBody",
                         "markdown": True,
-                        "text": [
-                            "¡Personaliza tu experiencia con el asistente de fútbol!",
-                            "Podrás recibir recomendaciones y predicciones a tu medida."
-                        ]
+                        "text": "${data.welcome_text}"
                     },
                     {
                         "type": "Footer",
-                        "label": "Comenzar",
+                        "label": "Personalizar",
                         "on-click-action": {
                             "name": "data_exchange",
                             "payload": {}

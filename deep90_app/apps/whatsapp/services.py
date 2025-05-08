@@ -725,10 +725,8 @@ class WhatsAppService:
                         'flow_token': settings.WHATSAPP_FLOW_CONFIG_ANALYTICS_TOKEN,
                         'flow_id': settings.WHATSAPP_FLOW_CONFIG_ANALYTICS,
                         'flow_cta': 'Configurar',
-                        'mode': self.flow_mode,
-                        'flow_action_payload': {
-                            'screen': settings.WHATSAPP_FLOW_CONFIG_ANALYTICS_SCREEM
-                        }
+                        "flow_action": "data_exchange",
+                        'mode': self.flow_mode                        
                     }
                 }
             }

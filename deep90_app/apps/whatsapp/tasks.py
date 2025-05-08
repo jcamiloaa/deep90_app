@@ -113,9 +113,9 @@ def process_whatsapp_message(contact_data, message_data):
             else:
                 logger.warning(f"Unhandled interactive type: {interactive_type}")
                 whatsapp_service.send_text_message(
-                    wa_id, 
-                    "Lo siento, no puedo procesar este tipo de mensaje interactivo. Por favor escribe tu consulta en texto."
+                    wa_id, settings.WHATSAPP_ERROR_UNSUPPORTED                    
                 )
+                whatsapp_service.display_main_menu(whatsapp_user.phone_number)
         elif message_type == 'location':
             location_data = message_data.get('location', {})
             latitude = location_data.get('latitude')
@@ -129,10 +129,10 @@ def process_whatsapp_message(contact_data, message_data):
         else:
             # For unhandled message types
             whatsapp_service.send_text_message(
-                whatsapp_user.phone_number, 
-                "Lo siento, no puedo procesar este tipo de mensaje. Por favor envíame tu consulta en formato texto."
-            )
-    
+                whatsapp_user.phone_number,settings.WHATSAPP_ERROR_UNSUPPORTED)
+            
+            whatsapp_service.display_main_menu(whatsapp_user.phone_number)
+
     except Exception as e:
         logger.error(f"Error processing WhatsApp message: {e}")
         raise
