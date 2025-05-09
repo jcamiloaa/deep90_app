@@ -484,8 +484,94 @@ def process_flow_reply(whatsapp_user, message_id, nfm_data):
                     "Lo siento, ha ocurrido un error al guardar tu configuración. Por favor intenta nuevamente."
                 )
                 time.sleep(1)
+                whatsapp_service.display_main_menu(whatsapp_user.phone_number)  
+
+        elif flow_id == settings.WHATSAPP_FLOW_UPDATE_DATA:
+            # Procesar la respuesta del flujo de actualización de datos
+            logger.info(f"End Flow Update User By {whatsapp_user.phone_number}")
+            
+            try:
+                # Extraer los datos actualizados del usuario
+                full_name = response_data.get('full_name')
+                birth_date_str = response_data.get('birth_date')
+                country = response_data.get('country')
+                city = response_data.get('city')
+                email = response_data.get('email')
+                
+                # Convertir la fecha de nacimiento si está presente
+                birth_date = None
+                if birth_date_str:
+                    try:
+                        # Intentar formato DD/MM/YYYY
+                        from datetime import datetime
+                        birth_date = datetime.strptime(birth_date_str, '%d/%m/%Y').date()
+                    except ValueError:
+                        try:
+                            # Intentar formato YYYY-MM-DD
+                            birth_date = datetime.strptime(birth_date_str, '%Y-%m-%d').date()
+                        except ValueError:
+                            logger.warning(f"Invalid birth_date format: {birth_date_str}")
+                logger.info(f"*********************************************************")
+                logger.info(f"la fecha de nacimiento es: {birth_date}")
+                logger.info(f"la fecha str es {birth_date_str}")
+
+
+                # Actualizar los campos del usuario
+                updated_fields = []
+                if full_name:
+                    whatsapp_user.full_name = full_name
+                    updated_fields.append('full_name')
+                
+                if birth_date:
+                    whatsapp_user.birth_date = birth_date
+                    updated_fields.append('birth_date')
+                
+                if country:
+                    whatsapp_user.country = country
+                    updated_fields.append('country')
+                
+                if city:
+                    whatsapp_user.city = city
+                    updated_fields.append('city')
+                
+                if email:
+                    whatsapp_user.email = email
+                    updated_fields.append('email')
+                
+                # Si el usuario era nuevo, actualizarlo a registrado
+                if whatsapp_user.status == WhatsAppUserStatus.NEW:
+                    whatsapp_user.status = WhatsAppUserStatus.REGISTERED
+                    updated_fields.append('status')
+                
+                # Guardar los cambios en la base de datos
+                if updated_fields:
+                    whatsapp_user.save(update_fields=updated_fields + ['updated_at'])
+                
+                # Enviar mensaje de confirmación
+                whatsapp_service.send_text_message(
+                    whatsapp_user.phone_number,
+                    f"✅ *¡Datos actualizados correctamente!*\n\n"
+                    f"Gracias por actualizar tu información, {whatsapp_user.full_name or whatsapp_user.profile_name or ''}.\n\n"
+                    f"Tu perfil ha sido actualizado con los siguientes datos:\n"
+                    f"📝 Nombre: {whatsapp_user.full_name or 'No proporcionado'}\n"
+                    f"📧 Email: {whatsapp_user.email or 'No proporcionado'}\n"
+                    f"📍 País: {whatsapp_user.country or 'No proporcionado'}\n"
+                    f"🏙️ Ciudad: {whatsapp_user.city or 'No proporcionado'}\n"
+                    f"🎂 Fecha de nacimiento: {whatsapp_user.birth_date.strftime('%d/%m/%Y') if whatsapp_user.birth_date else 'No proporcionada'}\n"
+                )
+                
+                # Mostrar el menú principal después de unos segundos
+                time.sleep(1)
                 whatsapp_service.display_main_menu(whatsapp_user.phone_number)
-        
+                
+            except Exception as e:
+                logger.error(f"Error processing update data flow: {str(e)}")
+                whatsapp_service.send_text_message(
+                    whatsapp_user.phone_number,
+                    "Lo siento, ha ocurrido un error al actualizar tus datos. Por favor intenta nuevamente más tarde."
+                )
+                time.sleep(1)
+                whatsapp_service.display_main_menu(whatsapp_user.phone_number)
         else:
             # Not from our recognized flows, display main menu
             logger.warning(f"Unknown flow ID: {flow_id}")
@@ -732,6 +818,7 @@ def process_list_reply(whatsapp_user, message_id, list_id):
             show_profile(whatsapp_user)
     elif list_id == 'update_data':
         # Actualizar datos del usuario
+        logger.info(f"User {whatsapp_user.phone_number} selected to update data")
         whatsapp_service.send_update_data_flow(whatsapp_user.phone_number)
     elif list_id == 'subscription':
         # Gestionar suscripción

@@ -6,8 +6,9 @@ from .models import WhatsAppUser, Conversation, Message, UserInput, UserPreferen
 
 @admin.register(WhatsAppUser)
 class WhatsAppUserAdmin(admin.ModelAdmin):
-    list_display = ['phone_number', 'profile_name', 'full_name', 'email', 'status', 
+    list_display = ['phone_number', 'profile_name', 'full_name', 'email', 'birth_date','country', 'city','status', 
                      'subscription_plan', 'created_at', 'last_activity']
+    
     list_filter = ['status', 'subscription_plan', 'is_blacklisted', 'created_at']
     search_fields = ['phone_number', 'profile_name', 'full_name', 'email']
     date_hierarchy = 'created_at'

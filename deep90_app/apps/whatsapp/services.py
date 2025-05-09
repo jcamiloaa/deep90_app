@@ -591,55 +591,84 @@ class WhatsAppService:
 
     def send_update_data_flow(self, to):
         """
-        Send the update data flow to the user.
+        Send the user data update flow.
+        
+        Args:
+            to: Recipient phone number
+            
+        Returns:
+            API response
         """
-        headers = {
-            'Content-Type': 'application/json',
-            'Authorization': f'Bearer {self.access_token}'
-        }
-        data = {
-            'messaging_product': 'whatsapp',
-            'recipient_type': 'individual',
-            'to': to,
-            'type': 'interactive',
-            'interactive': {
-                'type': 'flow',
-                'header': {
-                    'type': 'text',
-                    'text': 'Actualizar Datos'
-                },
-                'body': {
-                    'text': 'Actualiza tus datos personales para mejorar tu experiencia.'
-                },
-                'footer': {
-                    'text': 'Tus datos son privados y seguros.'
-                },
-                'action': {
-                    'name': 'flow',
-                    'parameters': {
-                        'flow_message_version': self.flow_version_messages,
-                        'flow_token': settings.WHATSAPP_FLOW_UPDATE_DATA_TOKEN,
-                        'flow_id': settings.WHATSAPP_FLOW_UPDATE_DATA,
-                        'flow_cta': 'Actualizar',
-                        'mode': self.flow_mode,
-                        'flow_action_payload': {
-                            'screen': settings.WHATSAPP_FLOW_UPDATE_DATA_SCREEM
+        try:
+            headers = {
+                'Content-Type': 'application/json',
+                'Authorization': f'Bearer {self.access_token}'
+            }
+            
+            # Set flow parameters from settings
+            flow_id = settings.WHATSAPP_FLOW_UPDATE_DATA
+            flow_screen = settings.WHATSAPP_FLOW_UPDATE_DATA_SCREEM
+            flow_token = settings.WHATSAPP_FLOW_UPDATE_DATA_TOKEN
+            
+            data = {
+                'messaging_product': 'whatsapp',
+                'recipient_type': 'individual',
+                'to': to,
+                'type': 'interactive',
+                'interactive': {
+                    'type': 'flow',
+                    'header': {
+                        'type': 'text',
+                        'text': 'Actualizar Datos'
+                    },
+                    'body': {
+                        'text': '¡Actualiza tu información personal para mejorar tu experiencia en Deep90!'
+                    },
+                    'footer': {
+                        'text': 'Tus datos están seguros con nosotros'
+                    },
+                    'action': {
+                        'name': 'flow',
+                        'parameters': {
+                            'flow_message_version': self.flow_version_messages,
+                            'flow_token': flow_token,
+                            'flow_id': flow_id,
+                            'flow_cta': 'Actualizar',                            
+                            "flow_action": "data_exchange",
+                            'mode': self.flow_mode
                         }
                     }
                 }
             }
-        }
-        response = requests.post(self.send_message_url, headers=headers, json=data)
-        if response.status_code == 200:
+            
+            response = requests.post(
+                self.send_message_url,
+                headers=headers,
+                json=data
+            )
+            
+            response_json = response.json()
+            logger.info(f"Sent update data flow to {to}: {response_json}")
+            
+            # Log the interaction
             try:
-                message_id = response.json().get('messages', [{}])[0].get('id', None)
-                content = "Actualiza tus datos personales para mejorar tu experiencia."
-                self.log_message(to, content, 'flow_update_data', False, message_id, request_json=data, response_json=response.json())
-            except Exception as e:
-                logger.error(f"Error logging sent update data flow message: {e}")
-        else:
-            logger.error(f"Failed to send update data flow: {response.text}")
-        return response
+                user = WhatsAppUser.objects.get(phone_number=to)
+                self.log_message(
+                    to,
+                    "Enviado flujo de actualización de datos",
+                    message_type='flow',
+                    is_from_user=False,
+                    request_json=data,
+                    response_json=response_json
+                )
+            except WhatsAppUser.DoesNotExist:
+                logger.warning(f"Tried to send update data flow to non-existent user {to}")
+            
+            return response_json
+        
+        except Exception as e:
+            logger.error(f"Error sending update data flow: {e}")
+            return {"error": str(e)}
 
     def send_subscriptions_flow(self, to):
         """

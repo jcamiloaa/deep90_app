@@ -7,7 +7,10 @@ from .views import (
     whatsapp_flow_football,
     AssistantConfigFlowDataView,
     whatsapp_flow_assistant_config,
-    AssistantConfigSaveView
+    AssistantConfigSaveView,
+    UpdateDataFlowDataView,
+    whatsapp_flow_update_data,
+    UpdateDataSaveView
 )
 
 app_name = "whatsapp"
@@ -36,5 +39,14 @@ urlpatterns = [
     
     # Endpoint para guardar la configuración personalizada del asistente
     path("assistant-config/save/", AssistantConfigSaveView.as_view(), name="assistant-config-save"),
+    
+    # Endpoint para datos del flujo de actualización de datos de usuario
+    path("update-data-flow-data/", UpdateDataFlowDataView.as_view(), name="update-data-flow-data"),
+    
+    # Endpoint para servir el JSON del flujo de actualización de datos
+    path("flow/update-data/", whatsapp_flow_update_data, name="flow-update-data"),
+    
+    # Endpoint para guardar los datos actualizados del usuario
+    path("update-data/save/", UpdateDataSaveView.as_view(), name="update-data-save"),
 ]
 

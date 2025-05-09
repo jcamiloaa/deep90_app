@@ -17,7 +17,7 @@ from .models import WhatsAppUser, Conversation, Message, WhatsAppUserStatus, Use
 from .tasks import process_whatsapp_message, process_assistant_response
 from ..sports_data.models import LiveFixtureData
 from .flows import FootballDataFlow
-from .flows_config import ASSISTANT_CONFIG_FLOW_JSON
+from .flows_config import ASSISTANT_CONFIG_FLOW_JSON, UPDATE_DATA_FLOW_JSON
 
 logger = logging.getLogger(__name__)
 
@@ -566,6 +566,20 @@ def whatsapp_flow_assistant_config(request):
     """Devuelve el JSON del flujo de configuración de asistente personalizado."""
     return JsonResponse(ASSISTANT_CONFIG_FLOW_JSON, safe=False)
 
+
+@csrf_exempt
+def whatsapp_flow_update_data(request):
+    """
+    Endpoint para servir el JSON del flujo de actualización de datos de usuario.
+    
+    Este endpoint sigue el formato requerido por Meta para WhatsApp Flows.
+    
+    Returns:
+        JsonResponse: El JSON completo del flujo de actualización de datos.
+    """
+    return JsonResponse(UPDATE_DATA_FLOW_JSON, safe=False)
+
+
 class AssistantConfigFlowDataView(View):
     """
     Vista para manejar el endpoint del flujo de configuración del asistente.
@@ -1041,6 +1055,368 @@ class AssistantConfigSaveView(View):
         except WhatsAppUser.DoesNotExist:
             return JsonResponse({"status": "error", "message": "Usuario no encontrado"}, status=404)
         except Exception as e:
+            return JsonResponse({"status": "error", "message": str(e)}, status=400)
+
+
+class UpdateDataFlowDataView(View):
+    """
+    Vista para manejar el endpoint del flujo de actualización de datos de usuario.
+    
+    Esta vista se integra con WhatsApp Flows para permitir a los usuarios
+    actualizar su información personal de forma interactiva.
+    """
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.whatsapp_service = WhatsAppService()
+    
+    @method_decorator(csrf_exempt)
+    def dispatch(self, *args, **kwargs):
+        return super().dispatch(*args, **kwargs)
+    
+    def get(self, request, *args, **kwargs):
+        """
+        Maneja solicitudes GET para verificación o healthcheck.
+        """
+        logger.debug("Recibida solicitud GET en UpdateDataFlowDataView")
+        return JsonResponse({"status": "ok"})
+    
+    def post(self, request, *args, **kwargs):
+        """
+        Maneja las solicitudes POST del flujo de WhatsApp.
+        Descifra los datos, procesa la selección del usuario y devuelve
+        la siguiente pantalla cifrada.
+        """
+        logger.info("-----------------------------------------------------")
+        logger.info("Processing Update Data Flow Data View")
+        logger.info(f"Request body: {request.body}")
+        logger.info(f"Request headers: {request.headers}")
+        logger.info(f"Request method: {request.method}")
+        logger.info(f"Request path: {request.path}")
+        try:
+            body = json.loads(request.body)
+            encrypted_flow_data_b64 = body.get('encrypted_flow_data')
+            encrypted_aes_key_b64 = body.get('encrypted_aes_key')
+            initial_vector_b64 = body.get('initial_vector')
+            if not all([encrypted_flow_data_b64, encrypted_aes_key_b64, initial_vector_b64]):
+                logger.error("Falta algún campo requerido en la solicitud de flujo de actualización de datos")
+                return HttpResponse(status=421)
+            from .crypto import decrypt_request, encrypt_response
+            try:
+                decrypted_data, aes_key, iv = decrypt_request(
+                    encrypted_flow_data_b64, encrypted_aes_key_b64, initial_vector_b64
+                )
+            except Exception as e:
+                logger.error(f"Error al descifrar el mensaje: {e}")
+                return HttpResponse(status=421)
+            logger.debug(f"Datos descifrados: {decrypted_data}")
+            action = decrypted_data.get('action', '').lower()
+            screen = decrypted_data.get('screen', '')
+            data = decrypted_data.get('data', {})
+            flow_token = decrypted_data.get('flowToken') or decrypted_data.get('flow_token')
+            wa_id = decrypted_data.get('wa_id')
+            user_data = {}
+            try:
+                if wa_id:
+                    user = WhatsAppUser.objects.get(phone_number=wa_id)
+                    user_data = {
+                        "full_name": user.full_name or "",
+                        "email": user.email or "",
+                        "country": user.country or "",
+                        "city": user.city or "",
+                    }
+                    if user.birth_date:
+                        user_data["birth_date"] = user.birth_date.strftime('%d/%m/%Y')
+            except WhatsAppUser.DoesNotExist:
+                logger.warning(f"Usuario {wa_id} no encontrado para el flujo de actualización de datos")
+                user_data = {}
+            except Exception as e:
+                logger.error(f"Error al obtener datos del usuario: {e}")
+                user_data = {}
+            if action == 'ping':
+                logger.debug("Manejando solicitud de ping (health check)")
+                response_data = {"data": {"status": "active"}}
+                encrypted_response = encrypt_response(response_data, aes_key, iv)
+                return HttpResponse(encrypted_response, content_type='text/plain')
+            if action == 'init':
+                welcome_text = [
+                    "👤 *Actualiza tu Perfil*\n\nPor favor completa o actualiza tus datos para una mejor experiencia.",
+                    "Esta información nos ayudará a personalizar el contenido y las recomendaciones para ti.",
+                    "¡Comencemos! 👇"
+                ]
+                response_data = {
+                    "screen": "WELCOME_SCREEN",
+                    "data": {"welcome_text": welcome_text}
+                }
+                if flow_token:
+                    response_data["flow_token"] = flow_token
+                self._log_interaction(wa_id, "INIT", decrypted_data, response_data)
+                encrypted_response = encrypt_response(response_data, aes_key, iv)
+                return HttpResponse(encrypted_response, content_type='text/plain')
+            if action == 'data_exchange':
+                logger.debug(f"Manejando acción data_exchange para pantalla: {screen}")
+                if screen == 'WELCOME_SCREEN':
+                    response_data = {
+                        "screen": "USER_DATA",
+                        "data": {
+                            "form_description": "Por favor ingresa tus datos personales:",
+                            **user_data
+                        }
+                    }
+                    if flow_token:
+                        response_data["flow_token"] = flow_token
+                else:
+                    logger.warning(f"Pantalla no reconocida: {screen}")
+                    response_data = {
+                        "screen": "WELCOME_SCREEN",
+                        "data": {
+                            "welcome_text": [
+                                "👤 *Actualiza tu Perfil*\n\nPor favor completa o actualiza tus datos para una mejor experiencia.",
+                                "Esta información nos ayudará a personalizar el contenido y las recomendaciones para ti.",
+                                "¡Comencemos! 👇"
+                            ]
+                        }
+                    }
+                    if flow_token:
+                        response_data["flow_token"] = flow_token
+                self._log_interaction(wa_id, f"DATA_EXCHANGE_{screen}", decrypted_data, response_data)
+                encrypted_response = encrypt_response(response_data, aes_key, iv)
+                return HttpResponse(encrypted_response, content_type='text/plain')
+            if action == 'complete':
+                logger.debug(f"Manejando acción complete para pantalla: {screen}")
+                if screen == 'USER_DATA':
+                    full_name = data.get('full_name', '')
+                    birth_date = data.get('birth_date', '')
+                    email = data.get('email', '')
+                    country = data.get('country', '')
+                    city = data.get('city', '')
+                    logger.debug(f"Datos finales: nombre={full_name}, nacimiento={birth_date}, email={email}, país={country}, ciudad={city}")
+                    if wa_id:
+                        try:
+                            user, created = WhatsAppUser.objects.get_or_create(phone_number=wa_id)
+                            if full_name:
+                                user.full_name = full_name
+                            if email:
+                                user.email = email
+                            if country:
+                                user.country = country
+                            if city:
+                                user.city = city
+                            if birth_date:
+                                try:
+                                    # Intentar parsear la fecha en formato dd/mm/yyyy
+                                    from datetime import datetime
+                                    user.birth_date = datetime.strptime(birth_date, '%d/%m/%Y').date()
+                                except Exception as e:
+                                    logger.error(f"Error al parsear fecha de nacimiento: {str(e)}")
+                            user.save()
+                            logger.info(f"Datos guardados para usuario {wa_id}")
+                            try:
+                                self.whatsapp_service.send_text_message(
+                                    wa_id,
+                                    f"✅ *¡Tus datos han sido actualizados!*\n\n"
+                                    f"Gracias por mantener tu información al día. Esto nos ayuda a personalizar mejor tu experiencia con Deep90."
+                                )
+                            except Exception as e:
+                                logger.error(f"Error al enviar mensaje de confirmación: {str(e)}")
+                        except Exception as e:
+                            logger.error(f"Error al guardar datos del usuario: {str(e)}")
+                    response_data = {
+                        "data": {
+                            "extension_message_response": {
+                                "params": {
+                                    "flow_token": flow_token,
+                                    "result": "completed",
+                                    "full_name": full_name,
+                                    "email": email,
+                                    "country": country,
+                                    "city": city,
+                                    "flow_id": settings.WHATSAPP_FLOW_UPDATE_DATA
+                                }
+                            }
+                        }
+                    }
+                else:
+                    response_data = {
+                        "data": {
+                            "extension_message_response": {
+                                "params": {
+                                    "flow_token": flow_token,
+                                    "result": "completed"
+                                }
+                            }
+                        }
+                    }
+                self._log_interaction(wa_id, f"COMPLETE_{screen}", decrypted_data, response_data)
+                encrypted_response = encrypt_response(response_data, aes_key, iv)
+                return HttpResponse(encrypted_response, content_type='text/plain')
+            if action == 'back':
+                logger.debug(f"Manejando acción back desde pantalla {screen}")
+                if screen == 'USER_DATA':
+                    response_data = {
+                        "screen": "WELCOME_SCREEN",
+                        "data": {
+                            "welcome_text": [
+                                "👤 *Actualiza tu Perfil*\n\nPor favor completa o actualiza tus datos para una mejor experiencia.",
+                                "Esta información nos ayudará a personalizar el contenido y las recomendaciones para ti.",
+                                "¡Comencemos! 👇"
+                            ]
+                        }
+                    }
+                    if flow_token:
+                        response_data["flow_token"] = flow_token
+                else:
+                    response_data = {
+                        "screen": "WELCOME_SCREEN",
+                        "data": {
+                            "welcome_text": [
+                                "👤 *Actualiza tu Perfil*\n\nPor favor completa o actualiza tus datos para una mejor experiencia.",
+                                "Esta información nos ayudará a personalizar el contenido y las recomendaciones para ti.",
+                                "¡Comencemos! 👇"
+                            ]
+                        }
+                    }
+                    if flow_token:
+                        response_data["flow_token"] = flow_token
+                self._log_interaction(wa_id, f"BACK_{screen}", decrypted_data, response_data)
+                encrypted_response = encrypt_response(response_data, aes_key, iv)
+                return HttpResponse(encrypted_response, content_type='text/plain')
+            logger.warning(f"Acción no reconocida: {action}")
+            response_data = {
+                "screen": "WELCOME_SCREEN",
+                "data": {
+                    "welcome_text": [
+                        "👤 *Actualiza tu Perfil*\n\nPor favor completa o actualiza tus datos para una mejor experiencia.",
+                        "Esta información nos ayudará a personalizar el contenido y las recomendaciones para ti.",
+                        "¡Comencemos! 👇"
+                    ]
+                }
+            }
+            if flow_token:
+                response_data["flow_token"] = flow_token
+            encrypted_response = encrypt_response(response_data, aes_key, iv)
+            return HttpResponse(encrypted_response, content_type='text/plain')
+        except Exception as e:
+            logger.error(f"Error procesando solicitud de flujo de actualización de datos: {e}")
+            logger.error(traceback.format_exc())
+            return HttpResponse(status=421)
+    
+    def _extract_form_value(self, data, field_name, fallback_path=None):
+        """
+        Extrae un valor de formulario de los datos, con soporte para diferentes formatos.
+        
+        Args:
+            data: Diccionario de datos
+            field_name: Nombre del campo a extraer
+            fallback_path: Ruta alternativa (con notación de punto) para buscar
+            
+        Returns:
+            El valor extraído o None si no se encuentra
+        """
+        # Intentar obtener directamente
+        if field_name in data:
+            value = data[field_name]
+            if isinstance(value, list) and value:
+                return value[0] if len(value) == 1 else value
+            return value
+        
+        # Intentar con la ruta alternativa
+        if fallback_path:
+            parts = fallback_path.split('.')
+            if len(parts) == 2 and parts[0] in data and isinstance(data[parts[0]], dict) and parts[1] in data[parts[0]]:
+                value = data[parts[0]][parts[1]]
+                if isinstance(value, list) and value:
+                    return value[0] if len(value) == 1 else value
+                return value
+        
+        # Buscar en cualquier formulario anidado
+        for key, value in data.items():
+            if isinstance(value, dict) and field_name in value:
+                nested_value = value[field_name]
+                if isinstance(nested_value, list) and nested_value:
+                    return nested_value[0] if len(nested_value) == 1 else nested_value
+                return nested_value
+        
+        return None
+    
+    def _log_interaction(self, wa_id, action_type, request_data, response_data):
+        """
+        Registra la interacción para trazabilidad.
+        
+        Args:
+            wa_id: ID de WhatsApp del usuario
+            action_type: Tipo de acción (INIT, DATA_EXCHANGE, etc.)
+            request_data: Datos de la solicitud
+            response_data: Datos de la respuesta
+        """
+        if not wa_id:
+            logger.debug("No se pudo registrar interacción: falta wa_id")
+            return
+        
+        try:
+            self.whatsapp_service.log_message(
+                wa_id,
+                f"Update Data Flow - {action_type}",
+                'update_data_flow',
+                True,  # is_from_user=True para la solicitud
+                None,  # no message_id para flows
+                request_json=request_data,
+                response_json=response_data
+            )
+        except Exception as e:
+            logger.error(f"Error al registrar interacción: {str(e)}")
+
+
+class UpdateDataSaveView(View):
+    """
+    Vista para guardar los datos actualizados del usuario desde el flujo.
+    """
+    def post(self, request, *args, **kwargs):
+        try:
+            data = json.loads(request.body)
+            phone_number = data.get("phone_number")
+            user_data = data.get("user_data", {})
+            
+            # Validar que tenemos un número de teléfono
+            if not phone_number:
+                return JsonResponse({"status": "error", "message": "Número de teléfono requerido"}, status=400)
+            
+            # Obtener o crear el usuario
+            try:
+                user = WhatsAppUser.objects.get(phone_number=phone_number)
+            except WhatsAppUser.DoesNotExist:
+                return JsonResponse({"status": "error", "message": "Usuario no encontrado"}, status=404)
+            
+            # Actualizar campos del usuario
+            if "full_name" in user_data:
+                user.full_name = user_data["full_name"]
+            
+            if "birth_date" in user_data and user_data["birth_date"]:
+                try:
+                    from datetime import datetime
+                    user.birth_date = datetime.strptime(user_data["birth_date"], '%d/%m/%Y').date()
+                except ValueError:
+                    logger.warning(f"Invalid birth_date format: {user_data['birth_date']}")
+            
+            if "country" in user_data:
+                user.country = user_data["country"]
+            
+            if "city" in user_data:
+                user.city = user_data["city"]
+            
+            if "email" in user_data:
+                user.email = user_data["email"]
+            
+            # Si el usuario era nuevo, marcarlo como registrado
+            if user.status == WhatsAppUserStatus.NEW:
+                user.status = WhatsAppUserStatus.REGISTERED
+            
+            # Guardar cambios
+            user.save()
+            
+            return JsonResponse({"status": "success"})
+        except Exception as e:
+            logger.error(f"Error saving user data: {e}")
             return JsonResponse({"status": "error", "message": str(e)}, status=400)
 
 
